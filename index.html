@@ -56,6 +56,144 @@
 
   <!-- Боковая карточка-шторка персоны -->
   <aside id="panel" aria-live="polite" aria-label="Карточка персоны"></aside>
+
+  <!-- ==========================================================================
+     МОДАЛЬНЫЙ / ПОЛНОЭКРАННЫЙ РЕЖИМ: КАРТОЧНЫЙ СВАЙП ВЕТВИ (FAMILY BRANCH VIEW)
+     Вставьте этот блок в index.html перед закрывающим тегом </main>
+     ========================================================================== -->
+
+<div id="branchSwipeView" class="branch-swipe-modal" hidden aria-label="Карточный просмотр ветви">
+  <!-- Верхняя панель ветви -->
+  <header class="branch-view-header">
+    <div class="branch-view-title-wrap">
+      <div class="branch-view-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+          <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+          <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+          <path d="M10 6.5h4M17.5 10v4"></path>
+        </svg>
+      </div>
+      <div>
+        <h2 id="branchViewHeading">Ветвь Долмата Новикова</h2>
+        <div class="branch-view-sub">
+          <span id="branchViewKidsCount">Дети: 11 человек</span>
+          <span class="branch-view-pill">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m17 2 4 4-4 4"></path>
+              <path d="M3 11v-1a4 4 0 0 1 4-4h14"></path>
+              <path d="m7 22-4-4 4-4"></path>
+              <path d="M21 13v1a4 4 0 0 1-4 4H3"></path>
+            </svg>
+            свайп влево-вправо
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="branch-view-badges">
+      <span class="badge-revision">X ревизия · 1858 г.</span>
+      <span class="badge-records">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+        </svg>
+        <span id="branchViewDocsCount">8 записей метрик</span>
+      </span>
+      <button type="button" class="branch-view-close" id="closeBranchSwipe" aria-label="Вернуться к схеме">✕</button>
+    </div>
+  </header>
+
+  <!-- Карточка родителей ветви -->
+  <div class="branch-parents-card" id="branchParentsCard">
+    <div class="branch-parents-avatar">
+      <div class="avatar-placeholder">👨‍👩‍👧</div>
+    </div>
+    <div class="branch-parents-info">
+      <div class="parents-names-row">
+        <b id="branchParentsTitle">Долмат и Ксения</b>
+        <span class="verified-icon" title="Подтверждено в архиве">✓</span>
+      </div>
+      <div class="parents-meta" id="branchParentsMeta">1838–1904 · 11 детей</div>
+    </div>
+    <button type="button" class="parents-action-btn" id="branchFocusParents" title="Показать пару в общем древе" aria-label="Показать в древе">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+        <circle cx="9" cy="7" r="4"></circle>
+        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Временная шкала поколения -->
+  <div class="branch-timeline-bar">
+    <div class="timeline-line"></div>
+    <div class="timeline-pointer" id="branchTimelinePointer"></div>
+  </div>
+
+  <!-- Кнопки быстрой навигации влево / вправо -->
+  <div class="branch-carousel-nav">
+    <button type="button" class="carousel-nav-btn prev" id="carouselPrevBtn">
+      ← <span id="carouselPrevLabel">старшие</span>
+    </button>
+    <button type="button" class="carousel-nav-btn next" id="carouselNextBtn">
+      <span id="carouselNextLabel">младшие</span> →
+    </button>
+  </div>
+
+  <!-- Горизонтальная карусель карточек детей (свайп пальцем) -->
+  <div class="branch-children-carousel" id="branchChildrenCarousel" tabindex="0" role="region" aria-label="Список детей ветви">
+    <!-- Динамически заполняется карточками детей -->
+  </div>
+
+  <!-- Индикатор пагинации / точки свайпа -->
+  <div class="carousel-pagination-wrap">
+    <div class="carousel-info-text">
+      <span id="carouselRangeInfo">Показан ребёнок</span>
+      <b id="carouselActiveChildName">—</b>
+    </div>
+    <div class="carousel-dots" id="carouselDots">
+      <!-- Точки генерируются скриптом -->
+    </div>
+  </div>
+
+  <!-- Выдержка из архивного документа (метрическая запись выбранного ребёнка) -->
+  <div class="branch-archive-excerpt" id="branchArchiveExcerpt">
+    <div class="archive-excerpt-header">
+      <div class="archive-excerpt-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+          <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
+        </svg>
+      </div>
+      <div class="archive-excerpt-titles">
+        <b id="excerptTitle">Архивная запись</b>
+        <small id="excerptSource">Метрическая книга прихода д. Чикаши</small>
+      </div>
+      <button type="button" class="archive-open-btn" id="openFullExcerptDoc" title="Открыть скан целиком" aria-label="Открыть документ">↗</button>
+    </div>
+    <blockquote class="archive-excerpt-quote" id="excerptQuoteText">
+      «...деревни Чикашей крестьянин...»
+    </blockquote>
+  </div>
+
+  <!-- Нижняя панель действий режима -->
+  <footer class="branch-view-bottom-bar">
+    <button type="button" class="btn-bottom-action" id="openFamilyInTreeBtn">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+      В древо
+    </button>
+    <button type="button" class="btn-bottom-primary" id="returnToTreeBtn">
+      К общей схеме
+    </button>
+  </footer>
+</div>
+
+  
 </main>
 
 <footer>
