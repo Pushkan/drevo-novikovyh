@@ -1600,5 +1600,103 @@ if (stageActions) stageActions.hidden = false;
 setTimeout(() => {
   fitAll();
 }, 60);
+// ==========================================================================
+// КАРТОЧНЫЙ РЕЖИМ СВАЙПА ВЕТВИ (Вариант А)
+// ==========================================================================
+const branchModal = document.getElementById('branchSwipeView');
+const carouselEl = document.getElementById('branchChildrenCarousel');
+const dotsEl = document.getElementById('carouselDots');
 
+function openBranchSwipeView(familyId) {
+  const fam = D.fams[familyId] || D.fams['F6'] || Object.values(D.fams)[0];
+  if (!fam || !branchModal) return;
+
+  const parents = [fam.h, fam.w].filter(Boolean).map(id => D.people[id]?.name || id).join(' и ');
+  document.getElementById('branchViewHeading').textContent = `Ветвь: ${parents}`;
+  document.getElementById('branchParentsTitle').textContent = parents;
+  document.getElementById('branchViewKidsCount').textContent = `Дети: ${fam.ks.length} человек`;
+  document.getElementById('branchParentsMeta').textContent = `${fam.ks.length} детей`;
+
+  // Рендер карточек детей
+  carouselEl.innerHTML = fam.ks.map((kId, idx) => {
+    const k = D.people[kId];
+    if (!k) return '';
+    const sexClass = k.sex === 'M' ? 'boy' : 'girl';
+    const dates = pDates(kId);
+    const hasDoc = k.status === 'doc' || (k.docs && k.docs.length > 0);
+    return `
+      <div class="child-swipe-card ${sexClass} ${idx === 0 ? 'active' : ''}" data-id="${kId}" data-idx="${idx}">
+        <div>
+          <div class="child-card-header">
+            <span class="child-num-tag">#${idx + 1} ребёнок</span>
+            <span class="child-selected-badge" style="${idx === 0 ? '' : 'display:none;'}">● Выбран</span>
+          </div>
+          <h3 class="child-card-name">${esc(k.given || k.name)}</h3>
+          <div class="child-card-patronymic">${esc(k.lines?.[2] || '')}</div>
+          <div class="child-card-dates">📅 ${esc(dates)}</div>
+        </div>
+        <div>
+          ${hasDoc ? `<div class="child-doc-preview">📖 Метрическая книга (ГАПК)</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Рендер точек пагинации
+  dotsEl.innerHTML = fam.ks.map((_, i) => `<span class="carousel-dot ${i === 0 ? 'active' : ''}"></span>`).join('');
+
+  // Обновление первой цитаты
+  updateExcerpt(fam.ks[0]);
+
+  branchModal.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+
+function updateExcerpt(personId) {
+  const p = D.people[personId];
+  if (!p) return;
+  document.getElementById('carouselActiveChildName').textContent = p.name;
+  const quote = p.notes?.[0] || (p.events?.[0]?.n ? p.events[0].n : `«Запись в метрической книге о рождении ${p.name}»`);
+  document.getElementById('excerptQuoteText').textContent = quote;
+  document.getElementById('excerptTitle').textContent = `Архивная запись: ${p.name}`;
+}
+
+// Слушатели свайпа и кликов карусели
+if (carouselEl) {
+  carouselEl.addEventListener('click', e => {
+    const card = e.target.closest('.child-swipe-card');
+    if (!card) return;
+    carouselEl.querySelectorAll('.child-swipe-card').forEach(c => {
+      c.classList.remove('active');
+      c.querySelector('.child-selected-badge').style.display = 'none';
+    });
+    card.classList.add('active');
+    card.querySelector('.child-selected-badge').style.display = 'inline';
+    const idx = +card.dataset.idx;
+    dotsEl.querySelectorAll('.carousel-dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+    updateExcerpt(card.dataset.id);
+  });
+}
+
+// Закрытие карточного режима и возврат к общему полотну
+document.getElementById('closeBranchSwipe')?.addEventListener('click', () => {
+  branchModal.hidden = true;
+  document.body.style.overflow = '';
+});
+document.getElementById('returnToTreeBtn')?.addEventListener('click', () => {
+  branchModal.hidden = true;
+  document.body.style.overflow = '';
+});
+document.getElementById('openFamilyInTreeBtn')?.addEventListener('click', () => {
+  branchModal.hidden = true;
+  document.body.style.overflow = '';
+  const activeCard = carouselEl.querySelector('.child-swipe-card.active');
+  if (activeCard) select(activeCard.dataset.id);
+});
+
+// Кнопка вызова из мобильного меню:
+document.getElementById('branchToggle')?.addEventListener('click', () => {
+  // На мобильном можно сразу открыть свайп текущей выбранной ветви:
+  openBranchSwipeView('F6'); // Ветвь Долмата и Ксении
+});
 })();
