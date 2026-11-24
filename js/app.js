@@ -1,19 +1,13 @@
 (async () => {
-// ==========================================================================
-// FAMILY ARCHIVE — js/app.js (v2.11.0)
-// Родословная Новиковых из д. Чикаши
-// ==========================================================================
-
-// Загрузка данных
+// Load the published JSON before attaching the interface controls.
 const loadJSON = async path => {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
   return response.json();
 };
-
 const [initialData, initialViews] = await Promise.all([
-  loadJSON('data/tree-data.json?v=2.11.0'),
-  loadJSON('data/tree-views.json?v=2.11.0')
+  loadJSON('data/tree-data.json?v=2.10.30'),
+  loadJSON('data/tree-views.json?v=2.10.30')
 ]);
 
 const stage = document.getElementById('stage'), panel = document.getElementById('panel');
@@ -28,49 +22,34 @@ const expandBranches = document.getElementById('expandBranches');
 const collapseBranches = document.getElementById('collapseBranches');
 const clanDialog = document.getElementById('clanDialog');
 const clanList = document.getElementById('clanList');
-
-if (overviewLayer && stageActions) {
-  stage.append(overviewLayer, stageActions);
-}
-
+// The controls share the stage's size but sit outside its gesture surface.
+stage.append(overviewLayer, stageActions);
 let svg = null, D = null, W = 1, H = 1;
 const st = {s: 1, x: 0, y: 0};
 let movT = null;
 const OVERVIEW_SCALE = 0.55, BLEND_START = 0.63, BLEND_END = 0.47;
 const inOverview = () => st.s <= OVERVIEW_SCALE;
 const overviewScale = () => st.s / OVERVIEW_SCALE;
-const FARZ = 0.85;
+const FARZ = 0.85;                       // ниже порога видны имя, фамилия и годы
 let isFar = null;
-
-const apply = () => { 
-  if (!svg) return; 
-  svg.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`;
-  const f = st.s < FARZ; 
-  if (f !== isFar) { isFar = f; svg.classList.toggle('far', f); }
+const apply = () => { if (!svg) return; svg.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`;
+  const f = st.s < FARZ; if (f !== isFar) { isFar = f; svg.classList.toggle('far', f); }
   const mix = Math.max(0, Math.min(1, (BLEND_START - st.s) / (BLEND_START - BLEND_END)));
   const opacity = mix * mix * (3 - 2 * mix);
   const overview = inOverview();
   svg.style.opacity = 1 - opacity;
   svg.classList.toggle('overview', overview);
   svg.setAttribute('aria-hidden', overview);
-  if (overviewLayer) {
-    overviewLayer.hidden = false;
-    overviewLayer.inert = !overview;
-    overviewLayer.style.opacity = opacity;
-  }
+  overviewLayer.hidden = false;
+  overviewLayer.inert = !overview;
+  overviewLayer.style.opacity = opacity;
   if (mix > 0) paintMacro();
   mmView();
 };
-
-const panning = () => { 
-  if (!svg) return; 
-  svg.classList.add('moving'); 
-  clearTimeout(movT); 
-  movT = setTimeout(() => svg.classList.remove('moving'), 250); 
-};
-
+// ускорение (готовый «снимок» схемы) — только при перетаскивании: масштаб не меняется, текст остаётся чётким.
+// При масштабировании его выключаем, чтобы браузер перерисовывал схему в каждом кадре.
+const panning = () => { if (!svg) return; svg.classList.add('moving'); clearTimeout(movT); movT = setTimeout(() => svg.classList.remove('moving'), 250); };
 const clampS = s => Math.max(0.001, Math.min(4, s));
-
 function zoomAt(f, cx, cy) {
   stopMacroZoom();
   if (svg) { clearTimeout(movT); svg.classList.remove('moving'); }
@@ -101,17 +80,14 @@ function zoomAt(f, cx, cy) {
   }
   apply();
 }
-
 function fitBox(x, y, w, h, pad = 40) {
   const r = stage.getBoundingClientRect();
   const s = clampS(Math.min((r.width - 2 * pad) / w, (r.height - 2 * pad) / h, 1.6));
   if (s < BLEND_START) { fitAll(); return; }
   stopMacroZoom();
   macroFitted = false;
-  st.s = s; st.x = (r.width - w * s) / 2 - x * s; st.y = (r.height - h * s) / 2 - y * s; 
-  apply();
+  st.s = s; st.x = (r.width - w * s) / 2 - x * s; st.y = (r.height - h * s) / 2 - y * s; apply();
 }
-
 const fitAll = () => {
   stopMacroZoom();
   ensureOverview();
@@ -119,7 +95,6 @@ const fitAll = () => {
   st.s = macroFit().scale * OVERVIEW_SCALE;
   apply();
 };
-
 const norm = t => (t || '').toLowerCase().replace(/ё/g, 'е');
 const esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const linkify = t => esc(t).replace(/https?:\/\/[^\s)»,;]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
@@ -127,67 +102,39 @@ const pName = id => D.people[id] ? D.people[id].name : id;
 const pDates = id => { const l = D.people[id].lines; return l.find(t => /\d{4}|^~/.test(t)) || ''; };
 
 /* --- перетаскивание и масштаб --- */
-const ptrs = new Map(); 
-let moved = 0, last = null, pinch = null, lastTap = {t: 0, x: 0, y: 0}, tapTimer = null;
-
+const ptrs = new Map(); let moved = 0, last = null, pinch = null, lastTap = {t: 0, x: 0, y: 0}, tapTimer = null;
 function tapAction(x, y) {
   const hit = document.elementFromPoint(x, y);
   const chip = hit && hit.closest ? hit.closest('.chip') : null;
-  if (chip) { 
-    clanOff(); 
-    if (chip.dataset.b != null) toggleBranch(+chip.dataset.b); 
-    else toggleGroup(+chip.dataset.g); 
-    return; 
-  }
-  const el = hit && hit.closest ? hit.closest('.person') : null;
-  if (el) select(el.dataset.p); 
-  else clearSel();
+  if (chip) { clanOff(); if (chip.dataset.b != null) toggleBranch(+chip.dataset.b); else toggleGroup(+chip.dataset.g); return; } const el = hit && hit.closest ? hit.closest('.person') : null;
+  if (el) select(el.dataset.p); else clearSel();
 }
-
-{
-  const mm = document.getElementById('mm'); 
-  let dn = false;
-  if (mm) {
-    mm.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); dn = true; mm.setPointerCapture(e.pointerId); mmGo(e); });
-    mm.addEventListener('pointermove', e => { if (dn) { e.stopPropagation(); mmGo(e); } });
-    mm.addEventListener('pointerup', e => { e.stopPropagation(); dn = false; });
-  }
+{ const mm = document.getElementById('mm'); let dn = false;
+  mm.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); dn = true; mm.setPointerCapture(e.pointerId); mmGo(e); });
+  mm.addEventListener('pointermove', e => { if (dn) { e.stopPropagation(); mmGo(e); } });
+  mm.addEventListener('pointerup', e => { e.stopPropagation(); dn = false; });
 }
-
 stage.addEventListener('pointerdown', e => {
-  if (stageActions && stageActions.contains(e.target)) return;
+  if (stageActions.contains(e.target)) return;
   stopMacroZoom();
-  if (zoomMenu) zoomMenu.open = false;
+  zoomMenu.open = false;
   if (!e.target.closest('.overview-label')) {
-    e.preventDefault(); 
-    var _s = window.getSelection && window.getSelection(); 
-    if (_s) _s.removeAllRanges();
+    e.preventDefault(); var _s=window.getSelection&&window.getSelection(); if(_s) _s.removeAllRanges();
     stage.setPointerCapture(e.pointerId);
   }
-  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY}); 
-  moved = 0;
-  if (ptrs.size === 2) { 
-    const [a, b] = [...ptrs.values()]; 
-    pinch = {d: Math.hypot(a.x - b.x, a.y - b.y)}; 
-  }
-  last = {x: e.clientX, y: e.clientY}; 
-  stage.classList.add('drag');
+  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY}); moved = 0;
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = {d: Math.hypot(a.x - b.x, a.y - b.y)}; }
+  last = {x: e.clientX, y: e.clientY}; stage.classList.add('drag');
 });
-
 stage.addEventListener('pointermove', e => {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   const r = stage.getBoundingClientRect();
   if (ptrs.size === 2 && pinch) {
-    const [a, b] = [...ptrs.values()]; 
-    const d = Math.hypot(a.x - b.x, a.y - b.y);
-    zoomAt(d / pinch.d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top); 
-    pinch.d = d; 
-    moved += 10; 
-    return;
+    const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
+    zoomAt(d / pinch.d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top); pinch.d = d; moved += 10; return;
   }
-  const dx = e.clientX - last.x, dy = e.clientY - last.y; 
-  moved += Math.abs(dx) + Math.abs(dy);
+  const dx = e.clientX - last.x, dy = e.clientY - last.y; moved += Math.abs(dx) + Math.abs(dy);
   if (inOverview() && macroOffset) {
     if (moved >= 6) {
       if (!stage.hasPointerCapture(e.pointerId)) stage.setPointerCapture(e.pointerId);
@@ -203,20 +150,14 @@ stage.addEventListener('pointermove', e => {
   if (st.s < BLEND_START && macroOffset) {
     macroOffset.x += dx; macroOffset.y += dy;
   }
-  st.x += dx; st.y += dy; 
-  last = {x: e.clientX, y: e.clientY}; 
-  panning(); 
-  apply();
+  st.x += dx; st.y += dy; last = {x: e.clientX, y: e.clientY}; panning(); apply();
 });
-
 const up = e => {
   if (!ptrs.has(e.pointerId)) return;
-  ptrs.delete(e.pointerId); 
-  if (ptrs.size < 2) pinch = null; 
-  stage.classList.remove('drag');
-  
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; stage.classList.remove('drag');
   if (inOverview()) {
-    if (e.type === 'pointerup' && moved < 6 && overviewScale() < 0.28 && !e.target.closest('.overview-label')) {
+    if (e.type === 'pointerup' && moved < 6 && overviewScale() < 0.28 &&
+        !e.target.closest('.overview-label')) {
       const rect = stage.getBoundingClientRect();
       const x = e.clientX - rect.left, y = e.clientY - rect.top;
       const node = nearestMacro(x, y);
@@ -231,58 +172,41 @@ const up = e => {
   if (e.type === 'pointerup' && moved < 6 && ptrs.size === 0) {
     const now = Date.now(), r0 = stage.getBoundingClientRect();
     if (now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
-      clearTimeout(tapTimer); 
-      lastTap.t = 0;
+      clearTimeout(tapTimer); lastTap.t = 0;
       animView(() => zoomAt(1.8, e.clientX - r0.left, e.clientY - r0.top));
       return;
     }
     lastTap = {t: now, x: e.clientX, y: e.clientY};
-    const cx_ = e.clientX, cy_ = e.clientY;
+    const cx_ = e.clientX, cy_ = e.clientY, pid = e.pointerId;
     clearTimeout(tapTimer);
     tapTimer = setTimeout(() => tapAction(cx_, cy_), e.pointerType === 'mouse' ? 0 : 260);
     return;
   }
+  if (false) {
+    if (stage.releasePointerCapture) try { stage.releasePointerCapture(e.pointerId); } catch(_){}
+    const hit = document.elementFromPoint(e.clientX, e.clientY); const el = hit && hit.closest ? hit.closest('.person') : null;
+    if (el) select(el.dataset.p, false); else clearSel();
+  }
   if (ptrs.size === 1) last = [...ptrs.values()][0];
 };
-
-stage.addEventListener('pointerup', up); 
-stage.addEventListener('pointercancel', up);
-
-stage.addEventListener('wheel', e => {
-  if (stageActions && stageActions.contains(e.target)) return;
-  e.preventDefault();
-  const r = stage.getBoundingClientRect();
-  zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
-}, {passive: false});
-
-const center = () => { 
-  const r = stage.getBoundingClientRect(); 
-  return [r.width / 2, r.height / 2]; 
-};
-
-if (zoomMenu) {
-  zoomMenu.addEventListener('click', e => {
-    const button = e.target.closest('[data-zoom]');
-    if (!button) return;
-    if (button.dataset.zoom === 'fit') {
-      clearSel();
-      animView(fitAll);
-      zoomMenu.open = false;
-      zoomMenu.querySelector('summary')?.focus();
-      return;
-    }
-    const step = button.dataset.zoom === 'in' ? 1.25 : 1 / 1.25;
-    zoomAt(step, ...center());
-  });
-}
-
-const ppl = n => {
-  const m = n % 10, h = n % 100;
-  return (m === 1 && h !== 11) ? 'человек' : (m >= 2 && m <= 4 && (h < 12 || h > 14)) ? 'человека' : 'человек';
-};
-
+stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+stage.addEventListener('wheel', e => { if (stageActions.contains(e.target)) return; e.preventDefault(); const r = stage.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, {passive: false});
+const center = () => { const r = stage.getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
+zoomMenu.addEventListener('click', e => {
+  const button = e.target.closest('[data-zoom]');
+  if (!button) return;
+  if (button.dataset.zoom === 'fit') {
+    clearSel();
+    animView(fitAll);
+    zoomMenu.open = false;
+    zoomMenu.querySelector('summary').focus();
+    return;
+  }
+  const step = button.dataset.zoom === 'in' ? 1.25 : 1 / 1.25;
+  zoomAt(step, ...center());
+});
 function renderBranchList() {
-  if (!branchList) return;
   branchList.innerHTML = branchControls(VIEW).map(({group, index, title, count, open, color}) => {
     const detail = open
       ? '<span class="branch-state">Развёрнута</span> · Свернуть ветвь'
@@ -290,61 +214,51 @@ function renderBranchList() {
     return `<button type="button" data-${group ? 'g' : 'b'}="${index}" aria-expanded="${Boolean(open)}"><i style="--branch-color:${color}" aria-hidden="true"></i><span>${esc(title)}<small>${detail}</small></span><b aria-hidden="true">${open ? '−' : '+'}</b></button>`;
   }).join('');
 }
-
-const branchToggle = document.getElementById('branchToggle');
-if (branchToggle && branchDialog) {
-  branchToggle.onclick = () => {
-    if (zoomMenu) zoomMenu.open = false;
-    renderBranchList();
-    branchDialog.showModal();
-  };
-}
-
-if (branchList) {
-  branchList.addEventListener('click', e => {
-    const button = e.target.closest('button[data-g], button[data-b]');
-    if (!button) return;
-    const scrollTop = branchDialog.scrollTop;
-    const group = button.dataset.g != null;
-    const index = +(group ? button.dataset.g : button.dataset.b);
-    const anchor = group ? VIEWS.groups[index][1] || 'I35' : VIEWS.branches[index][0];
-    clearSel();
-    if (group) toggleGroup(index);
-    else toggleBranch(index);
-    renderBranchList();
-    branchList.querySelector(`[data-${group ? 'g' : 'b'}="${index}"]`)?.focus({preventScroll: true});
-    branchDialog.scrollTop = scrollTop;
-    const [x, y] = VIEW.cards[anchor];
-    const [cx, cy] = center();
-    animView(() => { st.x = cx - (x + CW / 2) * st.s; st.y = cy - (y + CH / 2) * st.s; apply(); });
-  });
-}
-
+document.getElementById('branchToggle').onclick = () => {
+  zoomMenu.open = false;
+  renderBranchList();
+  branchDialog.showModal();
+};
+branchList.addEventListener('click', e => {
+  const button = e.target.closest('button[data-g], button[data-b]');
+  if (!button) return;
+  const scrollTop = branchDialog.scrollTop;
+  const group = button.dataset.g != null;
+  const index = +(group ? button.dataset.g : button.dataset.b);
+  const anchor = group ? VIEWS.groups[index][1] || 'I35' : VIEWS.branches[index][0];
+  clearSel();
+  if (group) toggleGroup(index);
+  else toggleBranch(index);
+  renderBranchList();
+  branchList.querySelector(`[data-${group ? 'g' : 'b'}="${index}"]`)?.focus({preventScroll: true});
+  branchDialog.scrollTop = scrollTop;
+  // A list action can come from anywhere on the sheet, so bring its branch into view.
+  const [x, y] = VIEW.cards[anchor];
+  const [cx, cy] = center();
+  animView(() => { st.x = cx - (x + CW / 2) * st.s; st.y = cy - (y + CH / 2) * st.s; apply(); });
+});
 mobile.addEventListener('change', e => {
   if (e.matches) return;
   setReading(false);
-  if (zoomMenu) zoomMenu.open = false;
-  if (branchDialog && branchDialog.open) branchDialog.close();
-  if (clanDialog && clanDialog.open) clanDialog.close();
+  zoomMenu.open = false;
+  if (branchDialog.open) branchDialog.close();
+  if (clanDialog.open) clanDialog.close();
 });
-
 function setAllBranches(expand) {
-  if (branchDialog && branchDialog.open) branchDialog.close();
+  if (branchDialog.open) branchDialog.close();
   clearSel();
   renderView(expand ? ALLG() : 0, expand ? ALLB() : 0);
   setTimeout(() => animView(fitAll), 50);
 }
-
 const allBranchesOpen = () => MASK === ALLG() && BMASK === ALLB();
-if (allButton) allButton.onclick = () => setAllBranches(!allBranchesOpen());
-if (expandBranches) expandBranches.onclick = () => setAllBranches(true);
-if (collapseBranches) collapseBranches.onclick = () => setAllBranches(false);
-
+allButton.onclick = () => setAllBranches(!allBranchesOpen());
+expandBranches.onclick = () => setAllBranches(true);
+collapseBranches.onclick = () => setAllBranches(false);
 addEventListener('keydown', e => {
-  if (e.key !== 'Escape' || (branchDialog && branchDialog.open) || (clanDialog && clanDialog.open)) return;
-  if (lb && lb.classList.contains('open')) lb.classList.remove('open', 'img');
+  if (e.key !== 'Escape' || branchDialog.open || clanDialog.open) return;
+  if (lb.classList.contains('open')) lb.classList.remove('open', 'img');
   else if (panel.classList.contains('reading')) setReading(false, true);
-  else if (zoomMenu && zoomMenu.open) { zoomMenu.open = false; zoomMenu.querySelector('summary')?.focus(); }
+  else if (zoomMenu.open) { zoomMenu.open = false; zoomMenu.querySelector('summary').focus(); }
   else clearSel();
 });
 
@@ -357,20 +271,13 @@ function relatives(id) {
   const on = new Set([id, ...anc, ...desc, ...(D.people[id].sp || []), ...otherParentsOf(id)]);
   return {on, anc, desc};
 }
-
 function bboxOf(ids) {
   let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
-  ids.forEach(id => { 
-    const g = svg.querySelector(`.person[data-p="${id}"]`); 
-    if (!g) return; 
-    const b = g.getBBox();
-    x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); 
-    x2 = Math.max(x2, b.x + b.width); y2 = Math.max(y2, b.y + b.height); 
-  });
+  ids.forEach(id => { const g = svg.querySelector(`.person[data-p="${id}"]`); if (!g) return; const b = g.getBBox();
+    x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.width); y2 = Math.max(y2, b.y + b.height); });
   return [x1, y1, x2 - x1, y2 - y1];
 }
-
-/* ===== Режим «фокус» — раскладка вокруг выбранного человека ===== */
+/* ===== Релиз 2: режим «фокус» — раскладка вокруг выбранного человека прямо в браузере ===== */
 const CW = 126, CH = 86, IG = 6, PADF = 8, FG = 28, ROWH = CH + 120, AGAP = 28;
 const SVGNS = 'http://www.w3.org/2000/svg';
 let famsOf = {}, parentFam = {}, fullL = null, focL = null, focusId = null, curPos = {};
@@ -381,24 +288,19 @@ function initFocus() {
     [o.h, o.w].forEach(q => { if (q) (famsOf[q] = famsOf[q] || []).push(f); });
     o.ks.forEach(k => { parentFam[k] = f; });
   });
-  focL = document.createElementNS(SVGNS, 'g'); 
-  focL.id = 'focL';
+  focL = document.createElementNS(SVGNS, 'g'); focL.id = 'focL';
   svg.appendChild(focL);
   svg.style.overflow = 'visible';
 }
-
 const yr = p => D.people[p].card.yr;
 const isM = p => D.people[p].sex === 'M';
-const first = p => { 
-  const g = D.people[p].given || ''; 
-  return g.startsWith('Мать ') ? 'первая жена' : (g.replace(/[()]/g, '').split(' ')[0] || '?'); 
-};
+const first = p => { const g = D.people[p].given || ''; return g.startsWith('Мать ') ? 'первая жена' : (g.replace(/[()]/g, '').split(' ')[0] || '?'); };
 const famsSorted = p => (famsOf[p] || []).slice().sort((a, b) => D.fams[a].m - D.fams[b].m);
 const otherParentIn = (f, p) => D.fams[f].h === p ? D.fams[f].w : D.fams[f].h;
 const otherParentsOf = p => [...new Set((famsOf[p] || [])
   .filter(f => D.fams[f].unmarried).map(f => otherParentIn(f, p)).filter(Boolean))];
 
-/* --- потомки: дерево по ширинам поддеревьев --- */
+/* --- потомки: «аккуратное дерево» по ширинам поддеревьев --- */
 function unitOf(p) {
   const fs = famsSorted(p), sp = fs.map(f => otherParentIn(f, p));
   let m;
@@ -407,25 +309,17 @@ function unitOf(p) {
   else { m = []; if (sp[0]) m.push(sp[0]); m.push(p); sp.slice(1).forEach(s => s && m.push(s)); }
   return {p, m, fs};
 }
-
-function mergeCont(A, B, off) {
+function mergeCont(A, B, off) {           // B сдвинут на off
   const out = A.map(v => v.slice());
-  B.forEach(([l, r], k) => { 
-    const L_ = l + off, R_ = r + off;
-    if (!out[k]) out[k] = [L_, R_]; 
-    else out[k] = [Math.min(out[k][0], L_), Math.max(out[k][1], R_)]; 
-  });
+  B.forEach(([l, r], k) => { const L_ = l + off, R_ = r + off;
+    if (!out[k]) out[k] = [L_, R_]; else out[k] = [Math.min(out[k][0], L_), Math.max(out[k][1], R_)]; });
   return out;
 }
-
-function sepCont(A, B, g0, g) {
+function sepCont(A, B, g0, g) {           // минимальный сдвиг B, чтобы не налезал на A
   let d = -1e9;
-  for (let k = 0; k < Math.min(A.length, B.length); k++) {
-    if (A[k] && B[k]) d = Math.max(d, A[k][1] - B[k][0] + (k ? g : g0));
-  }
+  for (let k = 0; k < Math.min(A.length, B.length); k++) if (A[k] && B[k]) d = Math.max(d, A[k][1] - B[k][0] + (k ? g : g0));
   return d;
 }
-
 function measure(p, depth) {
   const u = unitOf(p);
   u.uw = u.m.length * CW + (u.m.length - 1) * IG;
@@ -436,20 +330,23 @@ function measure(p, depth) {
     const kids = ks.map(k => measure(k, depth + 1));
     const STEP = (CW + IG) / 2;
     if (kids.length >= 3 && kids.every(k => k.m.length === 1 && !k.blocks.length)) {
+      // шашечка: дети в два яруса со сдвигом на полкарточки
       kids.forEach((k, i) => { k.off = i * STEP; k.lvl = i % 2; });
       const w = (kids.length - 1) * STEP + CW;
       u.blocks.push({f, kids, cont: [[-PADF, w + PADF]], chk: true});
       return;
     }
+    // упаковка детей одной пары по контурам
     let cont = null;
     kids.forEach(k => {
       if (!cont) { k.off = 0; cont = k.cont.map(v => v.slice()); return; }
       k.off = sepCont(cont, k.cont, IG, AGAP);
       cont = mergeCont(cont, k.cont, k.off);
     });
-    cont[0] = [cont[0][0] - PADF, cont[0][1] + PADF];
+    cont[0] = [cont[0][0] - PADF, cont[0][1] + PADF];     // серая рамка
     u.blocks.push({f, kids, cont});
   });
+  // упаковка семей (несколько браков)
   let kc = null;
   u.blocks.forEach(b => {
     if (!kc) { b.off = 0; kc = b.cont.map(v => v.slice()); return; }
@@ -458,12 +355,12 @@ function measure(p, depth) {
   });
   u.cont = [[0, u.uw]];
   if (kc) {
+    // центр ряда детей — под центром пары
     u.koff = u.uw / 2 - (kc[0][0] + kc[0][1]) / 2;
     kc.forEach(([l, r], k) => { u.cont[k + 1] = [l + u.koff, r + u.koff]; });
   }
   return u;
 }
-
 function placeDesc(u, left, row, L) {
   let x = left;
   u.m.forEach(q => { L.pos[q] = {x, row, lvl: u.lvl || 0}; x += CW + IG; });
@@ -475,8 +372,9 @@ function placeDesc(u, left, row, L) {
   });
 }
 
-/* --- предки: родословная вверх --- */
+/* --- предки: родословная вверх с контурами (Рейнгольд–Тилфорд) --- */
 function ancFam(f, depth) {
+  // возвращает {cards:[[id,x,d]], cont:[[l,r]]} относительно точки, где стоит ребёнок (x = 0), d — глубина вверх (1 = родители)
   const o = D.fams[f], par = [o.h, o.w].filter(Boolean);
   if (!par.length || depth > 14) return {cards: [], cont: []};
   const sub = par.map(q => anc(q, depth + 1));
@@ -492,13 +390,11 @@ function ancFam(f, depth) {
     t.cards.forEach(([id, x, dd]) => cards.push([id, x + off[i], dd + 1]));
     t.cont.forEach(([l, r], k) => {
       const kk = k + 1; const L_ = l + off[i], R_ = r + off[i];
-      if (!cont[kk]) cont[kk] = [L_, R_]; 
-      else cont[kk] = [Math.min(cont[kk][0], L_), Math.max(cont[kk][1], R_)];
+      if (!cont[kk]) cont[kk] = [L_, R_]; else cont[kk] = [Math.min(cont[kk][0], L_), Math.max(cont[kk][1], R_)];
     });
   });
   return {cards, cont};
 }
-
 function anc(p, depth) {
   const f = parentFam[p];
   const up = f ? ancFam(f, depth) : {cards: [], cont: []};
@@ -513,6 +409,7 @@ function focusLayout(id) {
   placeDesc(root, 0, 0, L);
   const goDn = p => (D.people[p].kids || []).forEach(k => { L.blood.add(k); goDn(k); });
   goDn(id);
+  // братья и сёстры
   const pf = parentFam[id];
   let center = L.pos[id].x + CW / 2;
   if (pf) {
@@ -525,6 +422,7 @@ function focusLayout(id) {
     L.frames.push({f: pf, members: [...older, ...root.m, ...younger], row: 0});
     L.fams.add(pf);
     center = (lx + rx + CW) / 2 - CW / 2;
+    // единоутробные / единокровные братья и сёстры — в соседней рамке, со стороны общего родителя
     [[D.fams[pf].h, -1], [D.fams[pf].w, 1]].forEach(([par, side]) => {
       if (!par) return;
       (famsOf[par] || []).filter(f => f !== pf).sort((a, b) => D.fams[a].m - D.fams[b].m).forEach(f => {
@@ -539,10 +437,12 @@ function focusLayout(id) {
         L.frames.push({f, members: ks, row: 0}); L.fams.add(f);
       });
     });
+    // предки
     const A = ancFam(pf, 1);
     A.cards.forEach(([q, x, d]) => { L.pos[q] = {x: center + x, row: -d, lvl: 0}; L.blood.add(q); });
     A.cards.forEach(([q]) => { const f2 = parentFam[q]; if (f2) L.fams.add(f2); });
   }
+  // роли супругов «со стороны»
   L.roles = {};
   Object.entries(L.spouseOf).forEach(([q, p]) => {
     if (L.blood.has(q)) return;
@@ -554,6 +454,7 @@ function focusLayout(id) {
     const i = marriages.findIndex(f => otherParentIn(f, p) === q) + 1;
     L.roles[q] = marriages.length > 1 ? (isM(q) ? `${i}-й муж` : `${i}-я жена`) : (isM(q) ? 'муж' : 'жена');
   });
+  // родство относительно выбранного человека
   L.rel = {};
   const up = (d, m) => d === 1 ? (m ? 'отец' : 'мать') : d === 2 ? (m ? 'дед' : 'бабушка') : d === 3 ? (m ? 'прадед' : 'прабабушка') : `пра(${d - 2})${m ? 'дед' : 'бабушка'}`;
   const dn = (d, m) => d === 1 ? (m ? 'сын' : 'дочь') : d === 2 ? (m ? 'внук' : 'внучка') : d === 3 ? (m ? 'правнук' : 'правнучка') : `пра(${d - 2})${m ? 'внук' : 'внучка'}`;
@@ -573,24 +474,24 @@ function focusLayout(id) {
       else L.rel[q] = `${m ? 'муж' : 'жена'} ${dnG(r, pm)}`;
     }
   });
+  // высоты рядов: ряд с шашечкой выше на одну карточку
   const rowsAll = [...new Set(Object.values(L.pos).map(v => v.row))].sort((a, b) => a - b);
   const extra = {}; Object.values(L.pos).forEach(v => { if (v.lvl) extra[v.row] = 1; });
   const ry = {}; let yy = 0;
   rowsAll.forEach(r => { ry[r] = yy; yy += ROWH + (extra[r] ? CH + 16 : 0); });
   Object.values(L.pos).forEach(v => { v.y = ry[v.row] + v.lvl * (CH + 16); });
+  // перенос в координаты полной схемы: выбранный человек остаётся на своём месте
   const c0 = posInView(id), dx = c0.x - L.pos[id].x, dy = c0.y - L.pos[id].y;
   Object.values(L.pos).forEach(v => { v.x += dx; v.y += dy; });
   L.dy = dy; L.dx = dx;
   return L;
 }
 
-/* --- отрисовка карточки и текста --- */
-const CARD_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+/* --- рисование --- */
+const CARD_FONT = 'system-ui, sans-serif';
 const cardMeasure = document.createElement('canvas').getContext('2d');
-const plural = (n, a, b, c) => { 
-  const m = n % 10, h = n % 100; 
-  return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; 
-};
+// возраст: если известны и рождение, и смерть
+const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; };
 const AGE = {};
 function ageOf(p) {
   if (p in AGE) return AGE[p];
@@ -599,32 +500,24 @@ function ageOf(p) {
   if (t) {
     const [a, b] = t.split(' – ').map(x => x.trim());
     const approx = /~|ок\.|\?/.test(a + b);
-    const pd = x => { 
-      let m = x.match(/(\d\d)\.(\d\d)\.(\d{4})/); 
-      if (m) return {y: +m[3], m: +m[2], d: +m[1], full: true};
-      m = x.match(/(\d{4})/); 
-      return m ? {y: +m[1], full: false} : null; 
-    };
+    const pd = x => { let m = x.match(/(\d\d)\.(\d\d)\.(\d{4})/); if (m) return {y: +m[3], m: +m[2], d: +m[1], full: true};
+      m = x.match(/(\d{4})/); return m ? {y: +m[1], full: false} : null; };
     const A = pd(a), B = pd(b);
     if (A && B) {
       if (A.full && B.full) {
-        let y = B.y - A.y; 
-        if (B.m < A.m || (B.m === A.m && B.d < A.d)) y--;
+        let y = B.y - A.y; if (B.m < A.m || (B.m === A.m && B.d < A.d)) y--;
         if (y >= 1) r = `${approx ? '~' : ''}${y} ${plural(y, 'год', 'года', 'лет')}`;
         else {
           const days = Math.round((Date.UTC(B.y, B.m - 1, B.d) - Date.UTC(A.y, A.m - 1, A.d)) / 864e5);
           const mo = Math.floor(days / 30.44);
           r = mo >= 1 ? `${mo} ${plural(mo, 'месяц', 'месяца', 'месяцев')}` : days >= 1 ? `${days} ${plural(days, 'день', 'дня', 'дней')}` : '';
         }
-      } else { 
-        const y = B.y - A.y; 
-        if (y >= 1) r = `~${y} ${plural(y, 'год', 'года', 'лет')}`; 
-      }
+      } else { const y = B.y - A.y; if (y >= 1) r = `~${y} ${plural(y, 'год', 'года', 'лет')}`; }
     }
   }
   return AGE[p] = r;
 }
-
+// крупная подпись для отдалённой схемы: только фамилия и имя
 /* --- миникарта --- */
 let MM = {x: 0, y: 0, w: 1, h: 1};
 function mmContent() {
@@ -632,65 +525,47 @@ function mmContent() {
   const pos = focusId ? Object.entries(curPos).map(([p, q]) => [p, q.x, q.y]) : Object.entries(VIEW.cards).map(([p, c]) => [p, c[0], c[1]]);
   if (!pos.length) return;
   const xs = pos.map(a => a[1]), ys = pos.map(a => a[2]);
-  MM = {x: Math.min(...xs) - 40, y: Math.min(...ys) - 40}; 
-  MM.w = Math.max(...xs) + CW + 40 - MM.x; 
-  MM.h = Math.max(...ys) + CH + 40 - MM.y;
+  MM = {x: Math.min(...xs) - 40, y: Math.min(...ys) - 40}; MM.w = Math.max(...xs) + CW + 40 - MM.x; MM.h = Math.max(...ys) + CH + 40 - MM.y;
   const ar = Math.max(0.35, Math.min(1.2, MM.h / MM.w));
   mm.setAttribute('viewBox', `0 0 ${100} ${100 * ar}`);
-  const k = Math.min(100 / MM.w, 100 * ar / MM.h); 
-  MM.k = k; 
-  MM.ox = (100 - MM.w * k) / 2; 
-  MM.oy = (100 * ar - MM.h * k) / 2;
-  const mmC = document.getElementById('mmC');
-  if (mmC) {
-    mmC.innerHTML = pos.map(([p, x, y]) => `<rect x="${(MM.ox + (x - MM.x) * k).toFixed(2)}" y="${(MM.oy + (y - MM.y) * k).toFixed(2)}" width="${Math.max(0.6, CW * k).toFixed(2)}" height="${Math.max(0.5, CH * k).toFixed(2)}" fill="${D.people[p] ? D.people[p].card.strip : '#999'}"/>`).join('');
-  }
+  const k = Math.min(100 / MM.w, 100 * ar / MM.h); MM.k = k; MM.ox = (100 - MM.w * k) / 2; MM.oy = (100 * ar - MM.h * k) / 2;
+  document.getElementById('mmC').innerHTML = pos.map(([p, x, y]) => `<rect x="${(MM.ox + (x - MM.x) * k).toFixed(2)}" y="${(MM.oy + (y - MM.y) * k).toFixed(2)}" width="${Math.max(0.6, CW * k).toFixed(2)}" height="${Math.max(0.5, CH * k).toFixed(2)}" fill="${D.people[p] ? D.people[p].card.strip : '#999'}"/>`).join('');
   mmView();
 }
-
 function mmView() {
   const box = document.getElementById('mm'); if (!box || !MM.k) return;
   if (inOverview()) { box.classList.remove('on'); return; }
   const r = stage.getBoundingClientRect();
   const vx = -st.x / st.s, vy = -st.y / st.s, vw = r.width / st.s, vh = r.height / st.s;
   const show = vw < MM.w * 0.7 || vh < MM.h * 0.7;
-  box.classList.toggle('on', show); 
-  if (!show) return;
+  box.classList.toggle('on', show); if (!show) return;
   const v = document.getElementById('mmV');
-  if (v) {
-    v.setAttribute('x', (MM.ox + (vx - MM.x) * MM.k).toFixed(2)); 
-    v.setAttribute('y', (MM.oy + (vy - MM.y) * MM.k).toFixed(2));
-    v.setAttribute('width', (vw * MM.k).toFixed(2)); 
-    v.setAttribute('height', (vh * MM.k).toFixed(2));
-  }
+  v.setAttribute('x', (MM.ox + (vx - MM.x) * MM.k).toFixed(2)); v.setAttribute('y', (MM.oy + (vy - MM.y) * MM.k).toFixed(2));
+  v.setAttribute('width', (vw * MM.k).toFixed(2)); v.setAttribute('height', (vh * MM.k).toFixed(2));
 }
-
-function mmGo(e) {
+function mmGo(e) {                          // нажатие на миникарту — туда и переместиться
   const s_ = document.getElementById('mmS'), b = s_.getBoundingClientRect(), vb = s_.viewBox.baseVal;
   const ux = (e.clientX - b.left) / b.width * vb.width, uy = (e.clientY - b.top) / b.height * vb.height;
   const cx = MM.x + (ux - MM.ox) / MM.k, cy = MM.y + (uy - MM.oy) / MM.k, r = stage.getBoundingClientRect();
-  st.x = r.width / 2 - cx * st.s; st.y = r.height / 2 - cy * st.s; 
-  apply();
+  st.x = r.width / 2 - cx * st.s; st.y = r.height / 2 - cy * st.s; apply();
 }
-
 function cardText(text, y, preferredSize, className, weight = 400) {
   if (!text) return '';
-  const inset = 18, available = CW - inset - 8;
+  const inset = 17, available = CW - inset - 9;
   cardMeasure.font = `${weight} ${preferredSize}px ${CARD_FONT}`;
   const measured = cardMeasure.measureText(text).width;
   const size = measured > available ? preferredSize * available / measured : preferredSize;
-  return `<text class="${className}" x="${inset}" y="${y}" font-size="${size.toFixed(1)}" font-weight="${weight}">${esc(text)}</text>`;
+  return `<text class="${className}" x="${inset}" y="${y}" font-size="${size.toFixed(2)}" font-weight="${weight}">${esc(text)}</text>`;
 }
-
 function baseSVG(id) {
   const person = D.people[id], c = person.card;
   const given = person.given || '';
-  const isSpecialLabel = /^(?:\(|Имя неизвестно$|Сын |Мать )/.test(given);
-  const parts = given.trim().split(/\s+/);
-  const firstName = (isSpecialLabel ? given : parts[0]) || person.name;
-  const patronymic = isSpecialLabel ? '' : parts.slice(1).join(' ');
+  const label = /^(?:\(|Имя неизвестно$|Сын |Мать )/.test(given);
+  const [first, ...rest] = given.split(/\s+/);
+  const name = (label ? given : first) || person.name;
+  const patronymic = label ? '' : rest.join(' ');
   const surname = given && person.name.endsWith(given)
-    ? person.name.slice(0, -given.length).trim() : (person.lines && person.lines[0] ? person.lines[0] : '');
+    ? person.name.slice(0, -given.length).trim() : '';
   const shortSurname = surname.split(' (')[0];
   const dates = pDates(id);
   const years = dates.split(' – ').map(date => {
@@ -698,63 +573,42 @@ function baseSVG(id) {
     return year ? (/^(?:~|ок\.)/.test(date) ? '~' : '') + year : '';
   }).filter(Boolean).join('–');
   const fill = person.sex === 'M' ? 'node-man' : person.sex === 'F' ? 'node-woman' : 'node-neutral';
-  const hasDoc = person.status === 'doc' || (person.docs && person.docs.length > 0);
-  const outline = hasDoc ? ' node-archive' : '';
+  const outline = person.status === 'doc' ? ' node-archive' : '';
   const age = ageOf(id);
-
-  // Компактный вид (для дальнего/среднего масштаба)
   const overview =
-    cardText(firstName, 30, 18, 'node-name', 700) +
-    cardText(shortSurname, 49, 13, 'node-family', 500) +
-    cardText(years, 69, 11.5, 'node-fact', 400);
-
-  // Детальный вид (при приближении)
+    cardText(name, 30, 19, 'node-name', 700) +
+    cardText(shortSurname, 49, 13, 'node-family') +
+    cardText(years, 70, 11.5, 'node-fact');
   const details =
-    cardText(firstName, 23, 18, 'node-name', 750) +
-    cardText(surname, 38, 12, 'node-family', 550) +
-    cardText(patronymic, 50, 10.5, 'node-family', 400) +
-    cardText(dates, 66, 10, 'node-fact', 400) +
-    cardText(age, 77, 9, 'node-fact', 400);
-
-  return `<rect class="node-surface ${fill}${outline}" width="${CW}" height="${CH}" rx="8" stroke-width="${c.lw || 1.2}"${c.dash ? ' stroke-dasharray="3 2"' : ''}/>` +
-    `<rect class="node-clan" x="5" y="8" width="6" height="${CH - 16}" rx="3" fill="${c.strip}"/>` +
+    cardText(name, 23, 19, 'node-name', 700) +
+    cardText(surname, 37, 12, 'node-family') +
+    cardText(patronymic, 49, 11, 'node-family') +
+    cardText(dates, 65, 10.5, 'node-fact') +
+    cardText(age, 76, 9, 'node-fact');
+  return `<rect class="node-surface ${fill}${outline}" width="${CW}" height="${CH}" rx="8" stroke-width="${c.lw}"${c.dash ? ' stroke-dasharray="3 2"' : ''}/>` +
+    `<rect class="node-clan" x="5" y="9" width="7" height="${CH - 18}" rx="3" fill="${c.strip}"/>` +
     `<g class="cp">${overview}</g><g class="dt">${details}</g>`;
 }
-
-function underSVG(roleTxt) { return ''; }
-function roleBox(x, y, roleTxt) {
+function underSVG(roleTxt) { return ''; }  // подложка теперь рисуется в слое рамок, под линиями
+function roleBox(x, y, roleTxt) {          // подложка «жена/муж»: белая, но под линиями брака
   return `<g transform="translate(${x},${y})">` + roleSVG(roleTxt) + '</g>';
 }
 function roleSVG(roleTxt) {
   return roleTxt ? `<rect class="tree-spouse-frame" x="-4" y="-13" width="${CW + 8}" height="${CH + 17}" rx="6" fill="#fff" stroke="#9a9a9a" stroke-width="0.8" stroke-dasharray="3 2"/><text class="role-label" x="0" y="-5" font-size="7.5" fill="#888">${esc(roleTxt)}</text>` : '';
 }
-function overSVG(p, relTxt) {
+function overSVG(p, relTxt) {              // подпись родства — поверх
   return cardText(relTxt, ageOf(p) ? 84 : 78, 8.5, 'node-relation', 650);
 }
-function mkG(cls, html) { 
-  const g = document.createElementNS(SVGNS, 'g'); 
-  g.setAttribute('class', cls); 
-  g.innerHTML = html; 
-  return g; 
-}
-
-function setLayer(card, cls, html) {
+function mkG(cls, html) { const g = document.createElementNS(SVGNS, 'g'); g.setAttribute('class', cls); g.innerHTML = html; return g; }
+function setLayer(card, cls, html) {       // плавная смена слоя: старый гаснет, новый проявляется
   const old = card.querySelector(`:scope > .${cls}:not(.gone)`);
   if (old && old.dataset.h === html) return;
-  if (old) { 
-    old.classList.add('gone'); 
-    old.style.opacity = '0'; 
-    setTimeout(() => old.remove(), 450); 
-  }
+  if (old) { old.classList.add('gone'); old.style.opacity = '0'; setTimeout(() => old.remove(), 450); }
   if (!html) return;
-  const g = mkG(`fx ${cls}`, html); 
-  g.dataset.h = html; 
-  g.style.opacity = '0';
-  if (cls === 'under') card.insertBefore(g, card.firstChild); 
-  else card.appendChild(g);
+  const g = mkG(`fx ${cls}`, html); g.dataset.h = html; g.style.opacity = '0';
+  if (cls === 'under') card.insertBefore(g, card.firstChild); else card.appendChild(g);
   requestAnimationFrame(() => requestAnimationFrame(() => { g.style.opacity = '1'; }));
 }
-
 function linesSVG(L) {
   let gold = '', col = '';
   const ln = (x1, y1, x2, y2, c, g, kind = '') => {
@@ -763,6 +617,7 @@ function linesSVG(L) {
     col += `<line class="tree-connector${kind ? ' tree-' + kind : ''}" ${a} stroke="${c}" stroke-width="${kind === 'comb' ? 2 : 1.5}" stroke-linecap="round"/>`;
   };
   const kinS = id => !!D.people[id].kin || id === 'I1';
+  // уровни шин: семьи, чьи линии к детям в одном промежутке перекрываются, — на разной высоте
   const spans = [];
   L.fams.forEach(f => {
     const o = D.fams[f], pr = [o.h, o.w].filter(q => q && L.pos[q]), ks = o.ks.filter(k => L.pos[k]);
@@ -772,17 +627,10 @@ function linesSVG(L) {
     spans.push({f, row: Math.min(...ks.map(k => L.pos[k].y)), lo: Math.min(xc, ...kxs), hi: Math.max(xc, ...kxs)});
   });
   const lane = {};
-  const byRow = {}; 
-  spans.forEach(sp => (byRow[sp.row] = byRow[sp.row] || []).push(sp));
+  const byRow = {}; spans.forEach(sp => (byRow[sp.row] = byRow[sp.row] || []).push(sp));
   Object.values(byRow).forEach(list => {
-    list.sort((a, b) => a.lo - b.lo); 
-    const ends = [];
-    list.forEach(sp => { 
-      let i = ends.findIndex(e => e + 12 < sp.lo); 
-      if (i < 0) { i = ends.length; ends.push(0); } 
-      ends[i] = sp.hi; 
-      lane[sp.f] = i; 
-    });
+    list.sort((a, b) => a.lo - b.lo); const ends = [];
+    list.forEach(sp => { let i = ends.findIndex(e => e + 12 < sp.lo); if (i < 0) { i = ends.length; ends.push(0); } ends[i] = sp.hi; lane[sp.f] = i; });
   });
   L.fams.forEach(f => {
     const o = D.fams[f], c = o.col;
@@ -811,8 +659,10 @@ function linesSVG(L) {
     let xc, y0;
     const P0 = pr.map(q => L.pos[q]).sort((a, b) => a.x - b.x);
     const far = pr.length === 2 && Math.abs(P0[0].y - P0[1].y) < 1 && P0[1].x - P0[0].x > CW + IG + 2;
+    // другой брак кого-то из супругов тоже на экране?
     const otherShown = far && pr.some(z => (famsOf[z] || []).some(f2 => f2 !== f && [D.fams[f2].h, D.fams[f2].w].some(w => w && w !== z && L.pos[w])));
     if (far && !otherShown) {
+      // супруги разнесены предками: оба спускаются к общей линии под рядом, от неё — к детям
       const yb = P0[0].y + CH + 16 + (lane[f] || 0) * 6;
       const xa = P0[0].x + CW / 2, xb = P0[1].x + CW / 2;
       ln(xa, P0[0].y + CH, xa, yb, c, false); ln(xb, P0[1].y + CH, xb, yb, c, false); ln(xa, yb, xb, yb, c, false);
@@ -820,6 +670,7 @@ function linesSVG(L) {
       xc = Math.max(xa, Math.min(xb, kc)); y0 = yb;
       col += `<circle cx="${xc.toFixed(1)}" cy="${y0.toFixed(1)}" r="2.4" fill="${c}"/>`;
     } else if (far) {
+      // супруги стоят не рядом (несколько браков): линия к детям идёт прямо от жены/мужа этого брака
       const q = pr.find(z => (famsOf[z] || []).length === 1) || pr[1];
       xc = L.pos[q].x + CW / 2; y0 = L.pos[q].y + CH;
     } else if (pr.length === 2) {
@@ -846,7 +697,6 @@ function linesSVG(L) {
   });
   return gold + col;
 }
-
 function framesSVG(L) {
   return L.frames.map(fr => {
     const ps = fr.members.filter(q => L.pos[q]);
@@ -861,12 +711,11 @@ function framesSVG(L) {
   }).join('');
 }
 
-/* --- анимация: фокус на человеке --- */
+/* --- анимация: карточки переезжают, линии и рамки проявляются --- */
 const T = 650;
-const MINZ = 1.15;
+const MINZ = 1.15;  // меньше — текст карточек мелковат
 let backG = null, cardsG = null, timer = null;
 function setT(el, x, y) { el.style.transform = `translate(${x}px,${y}px)`; }
-
 function focusOn(id) {
   clearTimeout(timer);
   const L = focusLayout(id);
@@ -874,6 +723,7 @@ function focusOn(id) {
   const entering = !focusId;
   fullL.style.opacity = '0'; fullL.style.pointerEvents = 'none'; if (chipsG) chipsG.style.display = 'none';
   fullL.querySelectorAll('.person').forEach(g => { g.style.transition = 'none'; g.style.opacity = '0'; });
+  // старое — убрать
   if (backG) backG.remove();
   backG = document.createElementNS(SVGNS, 'g'); backG.setAttribute('class', 'focusBack');
   backG.innerHTML = framesSVG(L) + Object.entries(L.roles).map(([q, t]) => L.pos[q] ? roleBox(L.pos[q].x, L.pos[q].y, t) : '').join('') + linesSVG(L);
@@ -885,12 +735,7 @@ function focusOn(id) {
   const keep = new Set(ids);
   cardsG.querySelectorAll('.person').forEach(g => {
     const p = g.dataset.p;
-    if (!keep.has(p)) { 
-      const c = posInView(p); 
-      setT(g, c.x, c.y); 
-      g.style.opacity = '0'; 
-      setTimeout(() => g.remove(), T); 
-    }
+    if (!keep.has(p)) { const c = posInView(p); setT(g, c.x, c.y); g.style.opacity = '0'; setTimeout(() => g.remove(), T); }
   });
   ids.forEach(p => {
     let g = cardsG.querySelector(`.person[data-p="${p}"]`);
@@ -898,8 +743,7 @@ function focusOn(id) {
       g = document.createElementNS(SVGNS, 'g'); g.setAttribute('class', 'person fc'); g.dataset.p = p;
       g.appendChild(mkG('ring', `<rect x="-5" y="-5" width="${CW + 10}" height="${CH + 10}" rx="11" fill="none" stroke="#c8553d" stroke-width="2.5"/>`));
       g.appendChild(mkG('base', baseSVG(p)));
-      const c = posInView(p); 
-      setT(g, c.x, c.y);
+      const c = posInView(p); setT(g, c.x, c.y);
       g.style.opacity = entering ? '1' : '0';
       cardsG.appendChild(g);
     }
@@ -909,15 +753,11 @@ function focusOn(id) {
   });
   void cardsG.getBoundingClientRect();
   requestAnimationFrame(() => {
-    ids.forEach(p => { 
-      const g = cardsG.querySelector(`.person[data-p="${p}"]`); 
-      if (!g) return; 
-      setT(g, L.pos[p].x, L.pos[p].y); 
-      g.style.opacity = '1'; 
-    });
+    ids.forEach(p => { const g = cardsG.querySelector(`.person[data-p="${p}"]`); if (!g) return; setT(g, L.pos[p].x, L.pos[p].y); g.style.opacity = '1'; });
     timer = setTimeout(() => { if (backG) backG.style.opacity = '1'; }, T * 0.6);
   });
   curPos = L.pos; focusId = id; rebuildOverview(); mmContent();
+  // приближение: читаемый масштаб (текст карточек виден), в кадре — человек, его родители, супруги и дети
   const pp = D.people[id];
   const core = [id, ...(pp.par || []), ...(pp.sp || []), ...otherParentsOf(id), ...(pp.kids || [])].filter(p => L.pos[p]);
   const xs = core.map(p => L.pos[p].x), ys = core.map(p => L.pos[p].y);
@@ -927,35 +767,22 @@ function focusOn(id) {
     let s_ = Math.min((r.width - 40) / (x2 - x1), (r.height - 40) / (y2 - y1));
     s_ = Math.max(MINZ, Math.min(1.7, s_));
     const c = L.pos[id];
+    // если всё ближнее влезает — центр ближнего круга, иначе — сам человек чуть выше центра
     const fits = (x2 - x1) * s_ <= r.width - 30 && (y2 - y1) * s_ <= r.height - 30;
     const cx = fits ? (x1 + x2) / 2 : c.x + CW / 2, cy = fits ? (y1 + y2) / 2 : c.y + CH / 2;
-    st.s = s_; st.x = r.width / 2 - cx * s_; st.y = r.height * (fits ? 0.5 : 0.42) - cy * s_; 
-    apply();
+    st.s = s_; st.x = r.width / 2 - cx * s_; st.y = r.height * (fits ? 0.5 : 0.42) - cy * s_; apply();
   });
 }
-
 function focusOff() {
   if (!focusId) return;
   clearTimeout(timer);
-  if (backG) { 
-    backG.style.opacity = '0'; 
-    const b = backG; 
-    setTimeout(() => b.remove(), T); 
-    backG = null; 
-  }
+  if (backG) { backG.style.opacity = '0'; const b = backG; setTimeout(() => b.remove(), T); backG = null; }
   const back = new Set();
   if (cardsG) {
-    cardsG.querySelectorAll('.person').forEach(g => { 
-      const c = posInView(g.dataset.p); 
-      setT(g, c.x, c.y); 
-      if (VIEW.cards[g.dataset.p]) back.add(g.dataset.p); 
-      else g.style.opacity = '0';
-      g.classList.remove('me'); 
-      g.querySelectorAll('.fx').forEach(x => { x.style.opacity = '0'; }); 
-    });
-    const cg = cardsG; 
-    cardsG = null;
-    setTimeout(() => {
+    cardsG.querySelectorAll('.person').forEach(g => { const c = posInView(g.dataset.p); setT(g, c.x, c.y); if (VIEW.cards[g.dataset.p]) back.add(g.dataset.p); else g.style.opacity = '0';
+      g.classList.remove('me'); g.querySelectorAll('.fx').forEach(x => { x.style.opacity = '0'; }); });
+    const cg = cardsG; cardsG = null;
+    setTimeout(() => {          // карточка доехала — показываем «родную» и убираем летевшую
       fullL.querySelectorAll('.person').forEach(g => { g.style.opacity = '1'; });
       cg.remove();
     }, T + 30);
@@ -964,25 +791,24 @@ function focusOff() {
   fullL.style.opacity = '1'; fullL.style.pointerEvents = ''; if (chipsG) chipsG.style.display = '';
   focusId = null; curPos = {}; rebuildOverview(); mmContent();
 }
-
 function animView(fn) {
-  svg.classList.add('anim'); 
-  fn();
+  svg.classList.add('anim'); fn();
   setTimeout(() => svg.classList.remove('anim'), T + 50);
 }
 
-/* ===== Свёрнутые рода ===== */
+
+/* ===== Свёрнутые рода: заранее рассчитанные виды для каждого сочетания раскрытых групп ===== */
 let VIEWS = null, VIEW = null, MASK = 0, BMASK = 0, viewBackG = null, viewCardsG = null, chipsG = null, ANCH = {};
+// MASK — раскрытые рода (биты VIEWS.groups), BMASK — раскрытые ветви потомков (биты VIEWS.branches).
+// Смешанные состояния вычисляются независимо, без раскрытия остальных ветвей.
 const ALLB = () => (1 << VIEWS.branches.length) - 1;
 const ALLG = () => (1 << VIEWS.groups.length) - 1;
 const mixedView = window.NovikovyLayout(initialViews, initialData, CW, CH);
 const viewOf = (m, b) => mixedView(m, b);
-
 function buildAnch() {
   VIEWS.branches.forEach(([r, t, mem]) => mem.forEach(p => { ANCH[p] = r; }));
   VIEWS.groups.forEach(([k, sp, t, mem]) => mem.forEach(p => { ANCH[p] = sp || 'I35'; }));
 }
-
 function posIn(v, p) {
   let q = p, dy = 0;
   for (let i = 0; i < 6 && q; i++) {
@@ -992,7 +818,6 @@ function posIn(v, p) {
   return {x: v.W / 2, y: 0};
 }
 const posInView = p => posIn(VIEW, p);
-
 function familyTitle(f) {
   const {h, w, ks} = D.fams[f];
   const parents = [h, w].filter(Boolean);
@@ -1000,12 +825,10 @@ function familyTitle(f) {
   const clans = new Set(ks.map(id => D.people[id].clan));
   return clans.size === 1 && [...clans][0] || 'Семья';
 }
-
 function frameLabel(f) {
   const {h, w} = D.fams[f];
   return (h || w ? 'дети: ' : '') + familyTitle(f);
 }
-
 function placeFamilyCaptions(layer) {
   const segments = [...layer.querySelectorAll('line')].map(line =>
     ['x1', 'x2', 'y1', 'y2'].map(key => Number(line.getAttribute(key))));
@@ -1029,7 +852,6 @@ function placeFamilyCaptions(layer) {
     layer.appendChild(caption);
   }
 }
-
 function backHTML(v) {
   let s = '';
   v.frames.forEach(([f, x, y, w, h]) => {
@@ -1043,12 +865,11 @@ function backHTML(v) {
   v.dots.forEach(([x, y, c]) => { s += `<circle cx="${x}" cy="${y}" r="2.4" fill="${pal[c]}"/>`; });
   return s;
 }
-
 let overviewLayout = null, macroOffset = null, overviewDirty = true, overviewFrame = 0;
 let macroFitted = false, macroZoomFrame = 0;
 const macroPlane = document.createElement('div');
 macroPlane.className = 'macro-plane';
-if (overviewLayer) overviewLayer.appendChild(macroPlane);
+overviewLayer.appendChild(macroPlane);
 
 function rebuildOverview() {
   overviewDirty = true;
@@ -1169,534 +990,481 @@ function zoomToMacro(node) {
     const x = start.x + (width / 2 - start.x) * progress;
     const y = start.y + (height * 0.48 - start.y) * progress;
     alignMacro(node, x, y);
-    st.x = x - node.target.x * st.s;
-    st.y = y - node.target.y * st.s;
+    st.x = x - st.s * node.target.x;
+    st.y = y - st.s * node.target.y;
     apply();
-    if (time < 1) macroZoomFrame = requestAnimationFrame(draw);
+    macroZoomFrame = time < 1 ? requestAnimationFrame(draw) : 0;
   };
-  macroZoomFrame = requestAnimationFrame(draw);
+  draw(begin);
 }
 
-function nearestMacro(x, y, fromTarget = false) {
-  ensureOverview();
-  let best = null, bestDistance = Infinity;
-  for (const node of overviewLayout.nodes) {
-    const point = fromTarget
-      ? {x: st.x + node.target.x * st.s, y: st.y + node.target.y * st.s}
-      : macroPoint(node);
-    const distance = Math.hypot(point.x - x, point.y - y);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = node;
-    }
+function nearestMacro(x, y, detailed = false) {
+  let closest, distance = Infinity;
+  for (const node of overviewLayout?.nodes ?? []) {
+    const point = detailed ? {x: st.x + node.target.x * st.s, y: st.y + node.target.y * st.s} : macroPoint(node);
+    const d = Math.hypot(x - point.x, y - point.y);
+    if (d < distance) { closest = node; distance = d; }
   }
-  return best;
+  return closest;
 }
 
 function paintMacro() {
   ensureOverview();
-  const fit = macroFit();
-  const scale = macroFitted ? fit.scale : overviewScale();
-  const x = macroFitted ? fit.x : macroOffset?.x ?? 0;
-  const y = macroFitted ? fit.y : macroOffset?.y ?? 0;
-  macroPlane.style.transform = `translate(${x}px,${y}px) scale(${scale})`;
+  if (!overviewLayout) return;
+  const {clientWidth, clientHeight} = stage;
+  const scale = overviewScale();
+  const w = overviewLayout.width * scale, h = overviewLayout.height * scale;
+  if (macroFitted) {
+    const {x, y} = macroFit();
+    macroOffset = {x, y};
+  } else if (!macroOffset) {
+    macroOffset = {x: (clientWidth - w) / 2, y: 12};
+  }
+  if (!macroFitted && st.s <= BLEND_END && !macroZoomFrame) {
+    const clamp = (value, size, viewport, endPad) => {
+      const a = viewport - size - endPad;
+      return Math.max(Math.min(a, 12), Math.min(Math.max(a, 12), value));
+    };
+    macroOffset.x = clamp(macroOffset.x, w, clientWidth, 12);
+    macroOffset.y = clamp(macroOffset.y, h, clientHeight, 60);
+  }
+  macroPlane.classList.toggle('macro-map', scale < 0.33);
+  macroPlane.style.transform = 'translate(' + macroOffset.x + 'px,' + macroOffset.y + 'px) scale(' + scale + ')';
 }
 
 function queueOverview() {
-  cancelAnimationFrame(overviewFrame);
-  overviewFrame = requestAnimationFrame(paintMacro);
+  if (st.s >= BLEND_START || overviewFrame) return;
+  overviewFrame = requestAnimationFrame(() => {
+    overviewFrame = 0;
+    if (st.s >= BLEND_START) return;
+    if (macroFitted) fitAll();
+    else paintMacro();
+  });
 }
 
-function chipBox(x, y, label, open, color, extra = '') {
-  const w = 120, h = 26;
-  const cx = x + (CW - w) / 2;
-  const cy = y + CH + 6;
-  const bg = open ? '#ffffff' : color;
-  const fg = open ? '#1f2421' : '#ffffff';
-  const border = open ? 'stroke="#dfdbd2" stroke-width="1"' : '';
-  return `<g class="chip" transform="translate(${cx},${cy})" ${extra} cursor="pointer">` +
-    `<rect class="tb" width="${w}" height="${h}" rx="13" fill="${bg}" ${border}/>` +
-    `<text x="${w / 2}" y="17" font-size="11" font-weight="650" fill="${fg}" text-anchor="middle" font-family="${CARD_FONT}">${esc(label)}</text>` +
-  `</g>`;
-}
+new ResizeObserver(queueOverview).observe(stage);
 
+// язычок под карточкой (или справа от неё): цвет рода, большая зона нажатия
+function tabSVG(attr, x, y, w, h, label, sub, col, open, side) {
+  const r = 9, fs = Math.min(9, (w - 14) / (label.length * 0.6));
+  const d = side ? `M${x},${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x + r} Q${x},${y + h} ${x},${y + h - r} Z`
+    : `M${x},${y} H${x + w} V${y + h - r} Q${x + w},${y + h} ${x + w - r},${y + h} H${x + r} Q${x},${y + h} ${x},${y + h - r} Z`;
+  const tc = open ? col : '#ffffff', ty = sub ? y + h / 2 - 1.5 : y + h / 2 + fs * 0.36;
+  return `<g class="chip" ${attr} style="cursor:pointer"><rect x="${x - 8}" y="${y - (side ? 8 : 2)}" width="${w + 16}" height="${h + (side ? 16 : 12)}" fill="transparent"/>` +
+    `<path class="tb" d="${d}" fill="${open ? '#ffffff' : col}" stroke="${col}" stroke-width="${open ? 1.4 : 0}"/>` +
+    `<text x="${x + w / 2}" y="${ty}" font-size="${fs.toFixed(1)}" font-weight="bold" text-anchor="middle" fill="${tc}">${esc(label)}</text>` +
+    (sub ? `<text x="${x + w / 2}" y="${y + h / 2 + 9}" font-size="7.5" text-anchor="middle" fill="${tc}" opacity=".9">${esc(sub)}</text>` : '') + '</g>';
+}
+const ppl = n => (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? 'человека' : 'человек';
+const BRCOL = '#8a7560';
+function grpCol(mem) { const p = mem.find(q => D.people[q]); return p ? D.people[p].card.strip : '#666'; }
 function branchControls(v) {
-  const list = [];
-  VIEWS.groups.forEach(([k, sp, t, mem], i) => {
-    const open = (MASK & (1 << i)) !== 0;
-    const anchor = sp || 'I35';
-    const color = D.people[mem[0]] ? D.people[mem[0]].card.strip : '#4a7c59';
-    list.push({group: true, index: i, anchor, title: t, count: mem.length, open, color});
+  const controls = [];
+  const countNew = w => Object.keys(w.cards).filter(p => !v.cards[p]).length;
+  VIEWS.groups.forEach(([, spouse, title, members], index) => {
+    const anchor = spouse || 'I35';
+    if (!v.cards[anchor] || !members.some(p => D.people[p])) return;
+    const open = MASK >> index & 1;
+    controls.push({group: true, side: !spouse, anchor, title, index, open, color: grpCol(members),
+      count: open ? 0 : countNew(viewOf(MASK | 1 << index, BMASK))});
   });
-  VIEWS.branches.forEach(([r, t, mem], i) => {
-    const open = (BMASK & (1 << i)) !== 0;
-    const color = D.people[mem[0]] ? D.people[mem[0]].card.strip : '#4a7c59';
-    list.push({group: false, index: i, anchor: r, title: t, count: mem.length, open, color});
+  VIEWS.branches.forEach(([anchor, title], index) => {
+    if (!v.cards[anchor]) return;
+    const open = BMASK >> index & 1;
+    controls.push({group: false, side: false, anchor, title, index, open, color: BRCOL,
+      count: open ? 0 : countNew(viewOf(MASK, BMASK | 1 << index))});
   });
-  return list;
+  return controls;
 }
-
 function chipsHTML(v) {
   let s = '';
-  branchControls(v).forEach(({group, index, anchor, title, count, open, color}) => {
-    if (!v.cards[anchor]) return;
-    const [x, y] = v.cards[anchor];
-    const lbl = open ? '− свернуть' : `＋ ${title} · ${count}`;
-    s += chipBox(x, y, lbl, open, color, `data-${group ? 'g' : 'b'}="${index}"`);
-  });
+  const under = (a, attr, label, sub, col, open) => {
+    const [cx, cy] = v.cards[a], w = CW - 6, h = sub ? 30 : 20;
+    s += tabSVG(attr, cx + 3, cy + CH, w, h, label, sub, col, open, false);
+  };
+  for (const {group, side, anchor, title, index, open, count, color} of branchControls(v)) {
+    const attr = `data-${group ? 'g' : 'b'}="${index}"`;
+    const label = open ? group ? '− свернуть' : '− свернуть потомков' : `＋ ${title}`;
+    const sub = open ? '' : `${count} ${ppl(count)}`;
+    if (side) {
+      const [cx, cy] = v.cards[anchor];
+      s += tabSVG(attr, cx + CW + 16, cy + CH / 2 - 17, 120, 34, label, sub, color, open, true);
+    } else under(anchor, attr, label, sub, color, open);
+  }
   return s;
 }
-
-function renderView(m, b) {
-  MASK = m; BMASK = b;
-  const nextV = viewOf(m, b);
-  VIEW = nextV;
-  fullL.innerHTML = '';
-  viewBackG = document.createElementNS(SVGNS, 'g'); viewBackG.setAttribute('class', 'viewBack');
-  viewBackG.innerHTML = backHTML(nextV);
+function renderView(mask, bmask, anchorId) {
+  const old = VIEW, oldA = anchorId && old ? posIn(old, anchorId) : null;
+  MASK = mask; BMASK = bmask; VIEW = viewOf(mask, bmask); W = VIEW.W; H = VIEW.H;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
+  if (viewBackG) { const b = viewBackG; b.style.opacity = '0'; setTimeout(() => b.remove(), 400); }
+  viewBackG = mkG('viewBack fx', backHTML(VIEW)); viewBackG.style.opacity = old ? '0' : '1';
   placeFamilyCaptions(viewBackG);
-  fullL.appendChild(viewBackG);
-
-  viewCardsG = document.createElementNS(SVGNS, 'g'); viewCardsG.setAttribute('class', 'viewCards');
-  Object.keys(nextV.cards).forEach(p => {
-    const [x, y] = nextV.cards[p];
-    const g = document.createElementNS(SVGNS, 'g'); g.setAttribute('class', 'person'); g.dataset.p = p;
-    g.setAttribute('transform', `translate(${x},${y})`);
-    g.appendChild(mkG('base', baseSVG(p)));
-    viewCardsG.appendChild(g);
+  fullL.insertBefore(viewBackG, viewCardsG);
+  const keep = new Set(Object.keys(VIEW.cards));
+  viewCardsG.querySelectorAll('.person').forEach(g => {
+    if (keep.has(g.dataset.p)) return;
+    const a = posInView(g.dataset.p); setT(g, a.x, a.y); g.style.opacity = '0'; setTimeout(() => { if (!VIEW.cards[g.dataset.p]) g.remove(); }, T);
   });
-  fullL.appendChild(viewCardsG);
-
-  chipsG = document.createElementNS(SVGNS, 'g'); chipsG.setAttribute('class', 'chipsLayer');
-  chipsG.innerHTML = chipsHTML(nextV);
-  fullL.appendChild(chipsG);
-
-  if (allButton) allButton.textContent = allBranchesOpen() ? 'Свернуть всё' : 'Раскрыть всё';
-  rebuildOverview();
-  mmContent();
-}
-
-function toggleGroup(i) {
-  renderView(MASK ^ (1 << i), BMASK);
-}
-function toggleBranch(i) {
-  renderView(MASK, BMASK ^ (1 << i));
-}
-
-/* --- легенда родов --- */
-let CLAN = null;
-function clanOff() {
-  CLAN = null;
-  document.querySelectorAll('#legend button, #clanList button').forEach(b => {
-    b.classList.remove('on');
-    b.removeAttribute('aria-pressed');
-  });
-  if (svg) svg.classList.remove('clan');
-  rebuildOverview();
-}
-function filterClan(clan) {
-  if (CLAN === clan) { clanOff(); return; }
-  CLAN = clan;
-  document.querySelectorAll('#legend button, #clanList button').forEach(b => {
-    const active = b.dataset.clan === clan;
-    b.classList.toggle('on', active);
-    if (active) b.setAttribute('aria-pressed', 'true');
-    else b.removeAttribute('aria-pressed');
-  });
-  svg.classList.add('clan');
-  svg.querySelectorAll('.person').forEach(g => {
-    const p = g.dataset.p;
-    g.classList.toggle('on', D.people[p] && D.people[p].card.stripT === clan);
-  });
-  rebuildOverview();
-}
-
-function initLegend() {
-  const clans = {};
-  Object.values(D.people).forEach(p => {
-    const c = p.card.stripT;
-    if (c) clans[c] = (clans[c] || 0) + 1;
-  });
-  const nav = document.getElementById('legend');
-  if (nav) {
-    nav.innerHTML = Object.entries(clans).map(([c, count]) => {
-      const color = Object.values(D.people).find(p => p.card.stripT === c)?.card.strip || '#4a7c59';
-      return `<button type="button" data-clan="${esc(c)}"><i style="background:${color}" aria-hidden="true"></i>${esc(c)}<b>${count}</b></button>`;
-    }).join('');
-  }
-  if (clanList) {
-    clanList.innerHTML = Object.entries(clans).map(([c, count]) => {
-      const color = Object.values(D.people).find(p => p.card.stripT === c)?.card.strip || '#4a7c59';
-      return `<button type="button" data-clan="${esc(c)}"><i style="background:${color}" aria-hidden="true"></i><span>${esc(c)}</span><b>${count}</b></button>`;
-    }).join('');
-  }
-
-  const handler = e => {
-    const b = e.target.closest('button[data-clan]');
-    if (!b) return;
-    filterClan(b.dataset.clan);
-    if (clanDialog && clanDialog.open) clanDialog.close();
-  };
-  if (nav) nav.onclick = handler;
-  if (clanList) clanList.onclick = handler;
-  const clanToggle = document.getElementById('clanToggle');
-  if (clanToggle && clanDialog) {
-    clanToggle.onclick = () => {
-      if (zoomMenu) zoomMenu.open = false;
-      clanDialog.showModal();
-    };
-  }
-}
-
-/* --- поиск персон --- */
-function initSearch() {
-  const q = document.getElementById('q'), res = document.getElementById('results');
-  if (!q || !res) return;
-  const doSearch = () => {
-    const val = norm(q.value.trim());
-    if (!val || val.length < 2) { res.style.display = 'none'; return; }
-    const hits = Object.entries(D.people).filter(([id, p]) => {
-      return norm(p.name).includes(val) || (p.alt || []).some(a => norm(a).includes(val));
-    }).slice(0, 15);
-    if (!hits.length) {
-      res.innerHTML = '<div style="padding:10px 14px;color:var(--mute);font-size:13.5px;">Ничего не найдено</div>';
-      res.style.display = 'block';
-      return;
+  Object.keys(VIEW.cards).forEach(p => {
+    let g = viewCardsG.querySelector(`.person[data-p="${p}"]`);
+    if (!g) {
+      g = document.createElementNS(SVGNS, 'g'); g.setAttribute('class', 'person fc vc'); g.dataset.p = p;
+      g.appendChild(mkG('base', baseSVG(p)));
+      const a = old ? posIn(old, p) : posInView(p); setT(g, a.x, a.y);
+      if (old) g.style.opacity = '0';
+      viewCardsG.appendChild(g);
     }
-    res.innerHTML = hits.map(([id, p]) => {
-      const dates = pDates(id);
-      return `<button type="button" data-p="${id}"><b>${esc(p.name)}</b><small>${esc(dates)}</small></button>`;
-    }).join('');
-    res.style.display = 'block';
-  };
-  q.addEventListener('input', doSearch);
-  q.addEventListener('focus', () => { if (q.value.trim().length >= 2) doSearch(); });
-  res.addEventListener('click', e => {
-    const b = e.target.closest('button[data-p]');
-    if (!b) return;
-    const id = b.dataset.p;
-    q.value = '';
-    res.style.display = 'none';
-    select(id);
+    setLayer(g, 'under', underSVG(VIEW.roles[p] || ''));
   });
-  addEventListener('click', e => { if (!q.contains(e.target) && !res.contains(e.target)) res.style.display = 'none'; });
+  chipsG.innerHTML = chipsHTML(VIEW);
+  updAllBtn(); rebuildOverview(); mmContent();
+  if (!old) return;
+  void viewCardsG.getBoundingClientRect();
+  requestAnimationFrame(() => {
+    viewCardsG.querySelectorAll('.person').forEach(g => { if (!keep.has(g.dataset.p)) return; const a = posInView(g.dataset.p); setT(g, a.x, a.y); g.style.opacity = '1'; });
+    const b = viewBackG; setTimeout(() => { b.style.opacity = '1'; }, T * 0.6);
+  });
+  if (oldA) {                       // нажатая точка остаётся на том же месте экрана
+    const na = posInView(anchorId);
+    animView(() => { st.x -= (na.x - oldA.x) * st.s; st.y -= (na.y - oldA.y) * st.s; apply(); });
+  }
+}
+// Each control changes only its own visibility bit.
+function toggleGroup(i) {
+  const g = VIEWS.groups[i];
+  renderView(MASK ^ (1 << i), BMASK, g[1] || 'I35');
+}
+function toggleBranch(j) {
+  renderView(MASK, BMASK ^ (1 << j), VIEWS.branches[j][0]);
+}
+function updAllBtn() {
+  const all = allBranchesOpen();
+  allButton.textContent = all ? 'Свернуть всё' : 'Раскрыть всё';
+  expandBranches.disabled = all;
+  collapseBranches.disabled = !MASK && !BMASK;
 }
 
-/* --- выбор персоны и показ боковой шторки --- */
-let selId = null;
-function select(id, anim = true) {
-  if (selId === id) return;
-  selId = id;
+/* --- легенда родов: численность и фокус на роду --- */
+let CLAN = null;
+function buildLegend() {
+  const cnt = new Map();
+  Object.entries(D.people).forEach(([id, p]) => { const t = p.card.stripT; if (!t) return;
+    const o = cnt.get(t) || {n: 0, col: p.card.strip, ids: []}; o.n++; o.ids.push(id); cnt.set(t, o); });
+  const nav = document.getElementById('legend');
+  const sorted = [...cnt.entries()].sort((a, b) => b[1].n - a[1].n);
+  nav.innerHTML = sorted.map(([t, o]) =>
+    `<button data-clan="${esc(t)}" aria-pressed="false" title="Показать род на схеме"><i style="background:${o.col}"></i>${esc(t)} <b>${o.n}</b></button>`
+  ).join('');
+  const choose = e => {
+    const button = e.target.closest('[data-clan]');
+    if (!button) return;
+    if (clanDialog.open) clanDialog.close();
+    const t = button.dataset.clan;
+    if (CLAN === t) clanOff();
+    else clanOn(t, cnt.get(t).ids);
+  };
+  nav.onclick = clanList.onclick = choose;
+  document.getElementById('clanToggle').onclick = () => {
+    zoomMenu.open = false;
+    clanList.innerHTML = sorted.map(([title, {n, col}]) =>
+      `<button type="button" data-clan="${esc(title)}" aria-pressed="${CLAN === title}"><i style="--branch-color:${col}" aria-hidden="true"></i><span>${esc(title)}<small>${n} ${ppl(n)}</small></span><b aria-hidden="true">${CLAN === title ? '✓' : '›'}</b></button>`
+    ).join('');
+    clanDialog.showModal();
+  };
+}
+function clanOn(t, ids) {
+  clearSel(); clanOff();
+  let m = MASK, b = BMASK;
+  // Include the anchors needed to reach the selected people.
+  const needed = new Set(ids);
+  for (const p of needed) {
+    VIEWS.groups.forEach(([, anchor, , members], i) => {
+      if (!members.includes(p)) return;
+      m |= 1 << i;
+      if (anchor) needed.add(anchor);
+    });
+    VIEWS.branches.forEach(([anchor, , members], i) => {
+      if (!members.includes(p)) return;
+      b |= 1 << i;
+      needed.add(anchor);
+    });
+  }
+  if (m !== MASK || b !== BMASK) renderView(m, b);
+  CLAN = t; rebuildOverview(); const on = new Set(ids);
+  svg.classList.add('clan');
+  viewCardsG.querySelectorAll('.person').forEach(g => g.classList.toggle('on', on.has(g.dataset.p)));
+  document.querySelectorAll('#legend button').forEach(x => {
+    const active = x.dataset.clan === t;
+    x.classList.toggle('on', active);
+    x.setAttribute('aria-pressed', active);
+  });
+  const vis = ids.filter(p => VIEW.cards[p]);
+  if (!vis.length) return;
+  const xs = vis.map(p => VIEW.cards[p][0]), ys = vis.map(p => VIEW.cards[p][1]);
+  const x1 = Math.min(...xs) - 30, y1 = Math.min(...ys) - 40, x2 = Math.max(...xs) + CW + 30, y2 = Math.max(...ys) + CH + 40;
+  setTimeout(() => animView(() => fitBox(x1, y1, x2 - x1, y2 - y1, 20)), 30);
+}
+function clanOff() {
+  if (!CLAN) return; CLAN = null; rebuildOverview();
+  svg.classList.remove('clan');
+  viewCardsG.querySelectorAll('.person.on').forEach(g => g.classList.remove('on'));
+  document.querySelectorAll('#legend button.on').forEach(x => {
+    x.classList.remove('on');
+    x.setAttribute('aria-pressed', false);
+  });
+}
+
+/* --- история изменений --- */
+const CHANGES = [
+  ['2.10.30', 'Ноябрь 2026', ['Средний и дальний виды плавно сменяют друг друга. Команда «Вписать схему» показывает всё раскрытое древо на телефоне и компьютере.']],
+  ['2.10.29', 'Ноябрь 2026', ['На дальнем масштабе семьи показаны компактными плашками с индикаторами детей. Подписи групп разведены с линиями, а связь между супругами стала заметнее на среднем масштабе.']],
+  ['2.10.28', 'Ноябрь 2026', ['Увеличена метка рода, осветлены карточки и улучшена группировка детей одной семьи.']],
+  ['2.10.27', 'Ноябрь 2026', ['Цветная метка рода возвращена на левый край карточки. Упрощено расположение подписей.']],
+  ['2.10.26', 'Ноябрь 2026', ['Добавлен дальний масштаб с читаемыми названиями семей. На карточках выделена строка дат и обновлена метка рода.']],
+  ['2.10.25', 'Ноябрь 2026', ['Усилены голубая и сливочная заливки карточек, границы и метки рода. Фон семейных групп стал спокойнее.']],
+  ['2.10.24', 'Ноябрь 2026', ['На телефоне и компьютере карточки на схеме оформлены в сливочных и голубых тонах с крупными именами и цветной меткой рода.']],
+  ['2.10.23', 'Ноябрь 2026', ['Сокращён заголовок сайта. Развёрнутые ветви выделены в списке, который остаётся открытым при выборе нескольких ветвей.']],
+  ['2.10.22', 'Ноябрь 2026', ['На телефоне команды для всех ветвей перенесены в список «Ветви», а инструкция открывается кнопкой «?».']],
+  ['2.10.21', 'Ноябрь 2026', ['В мобильной версии выбор рода вынесен в отдельную кнопку «Роды» внизу схемы.']],
+  ['2.10.20', 'Ноябрь 2026', ['На телефоне добавлены кнопки масштаба, список ветвей с крупными кнопками и полноэкранный режим карточки.']],
+  ['2.10.19', 'Ноябрь 2026', ['Васса Новикова перенесена в семью Ивана Гавриловича и Евдокии Тимофеевны. Уточнено отчество.']],
+  ['2.10.18', 'Ноябрь 2026', ['Во всей истории версий указан месяц выпуска: ноябрь 2026 года.']],
+  ['2.10.17', 'Ноябрь 2026', ['Уточнены семейные связи Бычиных. В ветку Логиновых добавлен Егор, сын Александра и Светланы.']],
+  ['2.10.16', 'Ноябрь 2026', ['Уточнена заметка о годе рождения Ксении Матвеевны Левкиной.']],
+  ['2.10.15', 'Ноябрь 2026', ['Добавлены даты браков и сведения о смерти из архивных выписок. Разночтения отмечены в карточках.']],
+  ['2.10.14', 'Ноябрь 2026', ['Уточнены связи детей с единственными известными супругами родителей и добавлены недостающие отчества.']],
+  ['2.10.13', 'Ноябрь 2026', ['Добавлены отчества и даты по надписям на надгробиях Нины Бычиной, Николая и Владимира Огуля.']],
+  ['2.10.12', 'Ноябрь 2026', ['Нина Бычина указана матерью обоих детей Михаила Павловича. В карточках жён с неизвестной фамилией указаны фамилии по мужу.']],
+  ['2.10.11', 'Ноябрь 2026', ['Уточнены имена, даты, места и семейные связи. При отдалении скрываются подписи родства.']],
+  ['2.10.10', 'Ноябрь 2026', ['Добавлены потомки Надежды Николаевны и семейные сведения о Петре Николаевиче и его матери.']],
+  ['2.10.9', 'Ноябрь 2026', ['Уточнена запись о семейном предании происхождения Новиковых с Дона.']],
+  ['2.10.8', 'Ноябрь 2026', ['Сведения об обстоятельствах смерти из выписок и схемы эксперта добавлены в заметки со ссылками на источники.']],
+  ['2.10.7', 'Ноябрь 2026', ['Восстановлены три семейные заметки в ветке Шестаковых.']],
+  ['2.10.6', 'Ноябрь 2026', ['Порядок карточек в каждом ряду сохраняется при раскрытии родов и ветвей.']],
+  ['2.10.3', 'Ноябрь 2026', ['Рода и ветви потомков раскрываются независимо. Счётчики показывают число карточек, которые появятся по нажатию.']],
+  ['2.10.2', 'Ноябрь 2026', ['Сайт разделён на HTML, CSS, JavaScript и JSON. Публикация напрямую, без сборки.']],
+  ['2.10.1', 'Ноябрь 2026', ['Карточка человека: все разделы открываются свёрнутыми; архивные документы — сразу под плашкой; фотография — маленькая в плашке, по нажатию открывается на весь экран.', 'На телефоне при открытии схема опущена: сверху видны предки, снизу — дети, без пустоты внизу.']],
+  ['2.10.0', 'Ноябрь 2026', ['Карточка человека: сверху — плашка в цвет рода с именем, годами жизни и возрастом; разделы (родители, супруги, дети, братья и сёстры, крещение, документы, события, заметки) сворачиваются, открытые запоминаются.', 'Крупные подписи издалека: имя крупно, фамилия под ним, годы жизни внизу.', 'На телефоне схема открывается чуть дальше.']],
+  ['2.9.0', 'Ноябрь 2026', ['При отдалении на карточках остаются только крупные фамилия и имя — схему можно читать и издалека; при приближении возвращаются даты и отчества.', 'Миникарта в углу: показывает, какая часть схемы на экране; нажмите или ведите по ней, чтобы перейти.', 'На телефоне схема открывается сразу крупно — на Николае Долматовиче и Ефросинье.']],
+  ['2.8.3', 'Ноябрь 2026', ['Уточнено: Елена Алексеевна Баранова родилась 21.04.1999; фамилия Арнольда и Виктора — Лапины (без «скорее всего»).']],
+  ['2.8.2', 'Ноябрь 2026', ['Линии под карточками опущены чуть ниже, чтобы язычки «＋ род» их не закрывали.']],
+  ['2.8.1', 'Ноябрь 2026', ['В фокусе: если муж и жена разнесены своими предками далеко друг от друга, оба теперь соединены линией с детьми (например, Николай Долматович и Ефросинья над Таисией).']],
+  ['2.8.0', 'Ноябрь 2026', ['На карточках — сколько прожил человек, если известны даты рождения и смерти; у младенцев — в месяцах или днях, при неточных датах — «~».']],
+  ['2.7.2', 'Ноябрь 2026', ['Скрытая карточка снова раскрывается, когда выбираешь другого человека.']],
+  ['2.7.1', 'Ноябрь 2026', ['На полоске карточки — заметная кнопка «скрыть / показать» со стрелкой.', 'На компьютере карточку тоже можно скрыть: она сворачивается в узкую полоску справа, нажатие снова открывает её.']],
+  ['2.7.0', 'Ноябрь 2026', ['Телефон: карточку человека можно свернуть в полоску со стрелкой — схема остаётся на виду, нажатие на полоску снова открывает карточку.', 'Телефон: верхнее меню стало компактным — название, поиск и кнопка ☰; рода и кнопки открываются по ней.']],
+  ['2.6.3', 'Ноябрь 2026', ['Пунктирная рамка «муж/жена» осталась белой, но теперь лежит под линиями — линия брака видна целиком.']],
+  ['2.6.2', 'Ноябрь 2026', ['Если супруги стоят не рядом, а дети — под линией их брака, линия к детям спускается прямо над ними: меньше изломов и пересечений (например, у Павла).']],
+  ['2.6.1', 'Ноябрь 2026', ['Братья и сёстры от разных отцов или матерей стоят рядом: Павел — вплотную к Данилу и Марии; Порсевы — справа от Елены, Александр Юрьевич — слева.', 'В фокусе на человеке видны и братья и сёстры по матери или по отцу — в соседней рамке, с подписью «брат по матери».']],
+  ['2.6.0', 'Ноябрь 2026', ['Новая семья — Порсевы: второй муж Елены Александр Васильевич Порсев, его родители Василий и Устинья Андреевна, сёстры Татьяна и Ирина, брат Пётр с детьми; Черёмухины. Данил и Мария — дети Елены и Александра Порсева (фамилия у них Железняк).', 'Порсевы раскрываются вместе с ветвью Таисии.']],
+  ['2.5.0', 'Ноябрь 2026', ['Фамилии и отчества, которых не было в исходных записях, выведены по родителям: фамилия — по отцу (если отца нет — по фамилии матери по мужу), отчество — по имени отца. В заметках человека отмечено, что это выведено.', 'На язычке ветви — сумма: сама ветвь и все свёрнутые рода внутри неё (у Таисии — вместе с Логиновыми, Шестаковыми и Железняками).']],
+  ['2.4.1', 'Ноябрь 2026', ['На язычке свёрнутой части — сколько карточек появится именно по этому нажатию; вложенные рода внутри ветви считаются на своих язычках.', 'Убраны кнопки «Всё», «+» и «−»: масштаб — колёсиком и жестами, весь лист — кнопкой «Раскрыть всё».', 'Виктор Арнольдович — Лапин; добавлен его отец Арнольд Лапин.']],
+  ['2.4.0', 'Ноябрь 2026', ['Линия Логиновых расширена по таблице родных: Иван Михайлович (пчеловод из д. Вашутино), его сыновья Владимир, Пётр и Илья с детьми и внуками; Глазырины, Барановы, Шевчук, Ноздрюхины, Бузиловы.', 'Новый род — Шестаковы: родители Елены Алексеевны Логиновой, её сёстры и брат Ефим с семьёй.', 'Уточнены даты Владимира Ильича Логинова (29.12.1948 – 30.05.1993) и его родителей.', 'Свёрнутый род Логиновых теперь — 54 человека.']],
+  ['2.3.1', 'Ноябрь 2026', ['В заголовке — сколько всего человек на схеме.', 'Неизвестная дата смерти больше не показывается как «– ?»: остаётся только дата рождения.', 'Карточка Павла больше не выделяется жирным — на схеме все равны.', 'Крёстная Любови Глаголько — Евгения Безолуцких (со слов родных).']],
+  ['2.3.0', 'Ноябрь 2026', ['Под заголовком снова легенда родов, теперь с числом людей; нажатие на род раскрывает и показывает его, остальных приглушает.',
+    'Большие ветви внуков Николая и Ефросиньи (потомки Таисии, Валентины, Лидии, Раисы, Михаила, Зои) свёрнуты и раскрываются по нажатию.',
+    'Вместо маленьких чёрных плашек — цветные язычки под карточкой в цвет рода, в них легче попасть.',
+    'Кнопка «Раскрыть всё» раскрывает и рода, и ветви.', 'Подпись автора и эта история изменений.']],
+  ['2.2.0', 'Ноябрь 2026', ['Новое название: «Родословная Новиковых из деревни Чикаши».', 'Рода, из которых пришли жёны и мужья, свёрнуты; раскрываются по нажатию, нажатое место остаётся на экране.', 'Кнопка «Раскрыть все рода».']],
+  ['2.1.5', 'Ноябрь 2026', ['Распутаны рамки детей: «дети: Таисья» и «дети: Валерий» поменяны местами, меньше пересечений линий.']],
+  ['2.1.4', 'Ноябрь 2026', ['Текст больше не размывается при увеличении колёсиком.']],
+  ['2.1.3', 'Ноябрь 2026', ['Текст остаётся чётким после перемещения схемы.']],
+  ['2.1.2', 'Ноябрь 2026', ['Мягкая рамка выделения вместо ярко-красной.', 'Подписи родства исчезают плавно.', 'Цветная полоска рода со скруглёнными углами, не выходит за карточку.']],
+  ['2.1.1', 'Ноябрь 2026', ['В фокусе схема крупнее — текст читается сразу.', 'Масштаб двойным тапом.', 'Выбранный человек выделен рамкой.']],
+  ['2.1.0', 'Ноябрь 2026', ['Подписи родства («отец», «бабушка», «пра(3)дед»…) — относительно выбранного человека.']],
+  ['2.0.1', 'Ноябрь 2026', ['Убраны золотая линия и кнопка «Моя линия»: сайт для всех родственников.', 'Плавное возвращение карточек без двойников.']],
+  ['2.0.0', 'Ноябрь 2026', ['Режим фокуса: нажмите на человека — схема перестроится вокруг него, с предками, потомками, братьями и сёстрами.']],
+  ['1.3.3', 'Ноябрь 2026', ['Релиз 1. Данные встроены в страницу, внешние шрифты убраны — сайт открывается без лишних загрузок.']],
+  ['1.3.2', 'Ноябрь 2026', ['Девичьи фамилии на карточках.']],
+  ['1.3.1', 'Ноябрь 2026', ['Поиск в любых падежах; девичьи фамилии, выведенные по отцу.']],
+  ['1.3.0', 'Ноябрь 2026', ['Инструкция «Как читать схему».', 'Поиск по девичьей фамилии.']],
+  ['1.2.6', 'Ноябрь 2026', ['Порядок линий, Левкины переставлены; текст на схеме не выделяется при перетаскивании.']],
+  ['1.2.5', 'Ноябрь 2026', ['Родители стоят точно над детьми.']],
+  ['1.2.4', 'Ноябрь 2026', ['Ветви Михаила, Зои, Лидии и Раисы подняты выше — схема уже.']],
+  ['1.2.3', 'Ноябрь 2026', ['Линии обходят карточки.']],
+  ['1.2.2', 'Ноябрь 2026', ['Братья Бычины в одной рамке.']],
+  ['1.2.1', 'Ноябрь 2026', ['Белозеровы собраны вместе, семья Афанасия — рядом ниже.']],
+  ['1.2.0', 'Ноябрь 2026', ['Братья и сёстры в карточке человека; компактные рамки.']],
+  ['1.1.2', 'Ноябрь 2026', ['Распутаны жёны Гаврилы и Белозеровы.']],
+  ['1.1.1', 'Ноябрь 2026', ['Прямые вертикальные линии; ветви Савелия и Бычиных — справа.']],
+  ['1.1.0', 'Ноябрь 2026', ['Сканы архивных документов с расшифровками, крёстные, фотографии.']],
+  ['1.0.0', 'Ноябрь 2026', ['Интерактивная схема: поиск, подсветка предков и потомков, карточка человека.']],
+];
+const hdr = document.querySelector('header');
+document.getElementById('ver').onclick = () => {
+  lb.querySelector('.box').innerHTML = `<button class="close" aria-label="Закрыть">×</button><div class="cl"><h2>История изменений</h2>
+    <p class="meta">Версии — major.minor.patch: большое обновление · новая возможность · исправление.</p>` +
+    CHANGES.map(([v, d, items]) => `<h3>${v}${d ? ` <small>${esc(d)}</small>` : ''}</h3><ul>${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`).join('') + '</div>';
+  lb.classList.add('open'); lb.scrollTop = 0;
+};
+function select(id) {
+  if (!D.people[id]) return;
   clanOff();
-  renderPanel(id);
+  showPanel(id);
   focusOn(id);
 }
 function clearSel() {
-  if (!selId && !focusId) return;
-  selId = null;
-  panel.classList.remove('open');
   setReading(false);
+  clanOff();
+  panel.classList.remove('open');
   focusOff();
 }
-
-function setReading(enable, scroll = false) {
-  panel.classList.toggle('reading', enable);
-  document.querySelector('main')?.classList.toggle('reading', enable);
+function chips(ids) { return ids.length ? `<div class="chips">${ids.map(i => `<button data-go="${i}">${esc(pName(i))} <small>${esc(pDates(i))}</small></button>`).join('')}</div>` : '<p class="meta">нет на схеме</p>'; }
+function sibHtml(id) {
+  const p = D.people[id], par = p.par || [];
+  const seen = new Map();
+  par.forEach(q => ((D.people[q]||{}).kids || []).forEach(k => { if (k !== id) seen.set(k, (seen.get(k) || new Set()).add(q)); }));
+  if (!seen.size) return '<p class="meta">нет на схеме</p>';
+  const by = id_ => { const e = D.people[id_].lines.join(' ').match(/(\d{4})/); return e ? +e[1] : 9999; };
+  const list = [...seen.entries()].sort((a, b) => by(a[0]) - by(b[0]));
+  return `<div class="chips">${list.map(([k, ps]) => { const half = par.length > 1 && ps.size < par.length;
+    const via = half ? (D.people[[...ps][0]].sex === 'M' ? ' · по отцу' : ' · по матери') : '';
+    return `<button data-go="${k}">${esc(pName(k))} <small>${esc(pDates(k))}${via}</small></button>`; }).join('')}</div>`;
 }
-
-/* ==========================================================================
-   renderPanel — боковая шторка персоны (aside)
-   ========================================================================== */
-function renderPanel(id) {
-  const p = D.people[id];
-  if (!p) return;
-  const clanColor = p.card.strip || 'var(--primary)';
-  const clanName = p.clan || p.card.stripT || 'Род';
-  const hasDoc = p.status === 'doc' || (p.docs && p.docs.length > 0);
-
-  // Фотография
-  const photoHTML = (p.photos && p.photos.length) 
-    ? `<button class="pph" type="button" data-img="${esc(p.photos[0])}" aria-label="Открыть фото крупно">
-         <img src="${esc(p.photos[0])}" alt="${esc(p.name)}" loading="lazy">
-       </button>`
-    : '';
-
-  // Степень родства
-  const kinBadge = p.kin 
-    ? `<span class="kin" style="background:${clanColor}; color:#fff; font-weight:700; padding:2px 8px; border-radius:6px; font-size:12px; margin-right:6px;">${esc(p.kin)}</span>` 
-    : '';
-
-  // Архивные документы
-  let docsHTML = '';
-  if (p.docs && p.docs.length) {
-    const list = p.docs.map(docId => {
-      return `<button class="doc" type="button" data-doc="${esc(docId)}">
-        <div style="width:80px; height:52px; background:var(--chip); border-radius:6px; display:grid; place-items:center; color:var(--primary); font-size:11px; font-weight:700;">АРХИВ</div>
-        <div>
-          <b>Метрическая выпись ${esc(docId)}</b>
-          <small>ГАПК, архивный фонд д. Чикаши</small>
-        </div>
-      </button>`;
-    }).join('');
-
-    docsHTML = `
-      <details class="sec" open>
-        <summary>
-          <span>Архивные документы</span>
-          <b>${p.docs.length}</b>
-          <span class="cv">▾</span>
-        </summary>
-        <div class="sb docs">${list}</div>
-      </details>`;
-  }
-
-  // Список родственников
-  const renderKinList = (ids, title, open = false) => {
-    if (!ids || !ids.length) return '';
-    const items = ids.map(kId => {
-      const k = D.people[kId];
-      if (!k) return '';
-      return `<button type="button" data-p="${kId}">
-        <b>${esc(k.name)}</b>
-        <small>${esc(pDates(kId))}</small>
-      </button>`;
-    }).filter(Boolean).join('');
-    if (!items) return '';
-    return `
-      <details class="sec"${open ? ' open' : ''}>
-        <summary>
-          <span>${title}</span>
-          <b>${ids.length}</b>
-          <span class="cv">▾</span>
-        </summary>
-        <div class="sb chips">${items}</div>
-      </details>`;
-  };
-
-  // События
-  let eventsHTML = '';
-  if (p.events && p.events.length) {
-    const list = p.events.map(ev => `
-      <div class="ev">
-        <b>${esc(ev.t)}: ${esc(ev.d || '')}</b>
-        ${ev.pl ? `<div>${esc(ev.pl)}</div>` : ''}
-        ${ev.s ? `<div class="s">${esc(ev.s)}</div>` : ''}
-        ${ev.n ? `<div style="font-size:13px; color:var(--mute); margin-top:2px;">${esc(ev.n)}</div>` : ''}
-      </div>
-    `).join('');
-    eventsHTML = `
-      <details class="sec">
-        <summary>
-          <span>События</span>
-          <b>${p.events.length}</b>
-          <span class="cv">▾</span>
-        </summary>
-        <div class="sb">${list}</div>
-      </details>`;
-  }
-
-  // Заметки
-  let notesHTML = '';
-  if (p.notes && p.notes.length) {
-    const list = p.notes.map(n => `<p>${linkify(n)}</p>`).join('');
-    notesHTML = `
-      <details class="sec">
-        <summary>
-          <span>Заметки</span>
-          <b>${p.notes.length}</b>
-          <span class="cv">▾</span>
-        </summary>
-        <div class="sb notes">${list}</div>
-      </details>`;
-  }
-
-  // Верхняя полоска
-  const grabHTML = `
-    <div class="grab">
-      <button class="tg" type="button" aria-label="Свернуть панель">
-        <span>${esc(p.name)}</span>
-        <span class="hd">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-          <b>Скрыть</b>
-        </span>
-      </button>
-      <button class="panel-mode reading-enter" type="button">На весь экран</button>
-      <button class="panel-mode reading-exit" type="button">К древу</button>
-      <button class="x" type="button" aria-label="Закрыть">×</button>
-    </div>`;
-
-  // Главная плашка
-  const plateHTML = `
-    <div class="plate" style="--c:${clanColor};">
-      ${photoHTML}
-      <div class="pc">${esc(clanName)}</div>
-      <h2>${esc(p.given || p.name)}</h2>
-      <div class="pd">${kinBadge}${esc(pDates(id))}</div>
-      ${hasDoc ? '<div class="ps" style="color:var(--primary); font-weight:600; margin-top:4px;">✓ Есть подтверждение в архиве</div>' : ''}
-    </div>`;
-
-  panel.innerHTML = grabHTML + plateHTML + docsHTML +
-    renderKinList(p.par, 'Родители', true) +
-    renderKinList(p.sp, 'Супруги', true) +
-    renderKinList(p.kids, 'Дети', true) +
-    renderKinList(p.siblings, 'Братья и сёстры', false) +
-    eventsHTML + notesHTML;
-
-  panel.classList.add('open');
-  panel.classList.remove('min');
-
-  panel.querySelector('.x').onclick = () => clearSel();
-  panel.querySelector('.tg').onclick = () => panel.classList.toggle('min');
-  panel.querySelector('.reading-enter').onclick = () => setReading(true, true);
-  panel.querySelector('.reading-exit').onclick = () => setReading(false, true);
-
-  panel.querySelectorAll('.chips button[data-p]').forEach(b => {
-    b.onclick = () => select(b.dataset.p);
-  });
+function godHtml(p) {
+  const a = (p.godp || []).map(g => `<p class="god">Крёстный(ая): ${g.id ? `<button class="chipx" data-go="${g.id}">${esc(pName(g.id))}</button>` : esc(g.name)}${g.y ? ' — ' + esc(g.y) : ''}${g.unsure ? ' (прочтение неуверенное)' : ''}</p>`).join('');
+  const b = (p.godc || []).map(g => `<p class="god">Крестил(а): <button class="chipx" data-go="${g.id}">${esc(pName(g.id))}</button>${g.y ? ' — ' + esc(g.y) : ''}${g.unsure ? ' (прочтение неуверенное)' : ''}</p>`).join('');
+  return a || b ? `<h3>Крещение</h3>${a}${b}` : '';
 }
-
-/* --- полноэкранный лайтбокс --- */
 const lb = document.getElementById('lb');
-const helpBtn = document.getElementById('help');
-if (helpBtn && lb) {
-  helpBtn.onclick = () => {
-    const t = document.getElementById('helpT');
-    lb.className = 'open';
-    lb.querySelector('.box').innerHTML = t.innerHTML;
-    lb.querySelector('.close').onclick = () => lb.classList.remove('open');
-  };
-  lb.onclick = e => { 
-    if (e.target === lb || e.target.classList.contains('close')) lb.classList.remove('open', 'img'); 
-  };
+function openDoc(d) {
+  const o = D.docs[d];
+  lb.querySelector('.box').innerHTML = `<button class="close" aria-label="Закрыть">×</button><h2>${esc(o.title)}</h2>
+    <p class="meta">${esc(o.fond)}; unit ${esc(o.unit)}, кадр ${esc(o.frame)} · <a href="${o.url}" target="_blank" rel="noopener">дело на сайте архива</a></p>
+    <img src="${o.img}" alt="${esc(o.title)}"><p><b>Расшифровка.</b> ${esc(o.text)}</p>${o.note ? `<p class="meta">Примечание: ${esc(o.note)}</p>` : ''}
+    <h3>Упомянуты на схеме</h3><div class="chips">${o.who.filter(w => D.people[w]).map(w => `<button data-go="${w}">${esc(pName(w))}</button>`).join('')}</div>`;
+  lb.classList.remove('img'); lb.classList.add('open'); lb.scrollTop = 0;
 }
-
-/* --- инициализация данных --- */
-D = initialData;
-VIEWS = initialViews;
-buildAnch();
-
-// Создание основного холста SVG
-const stageEl = document.getElementById('stage');
-document.getElementById('loading')?.remove();
-svg = document.createElementNS(SVGNS, 'svg');
-svg.id = 'tree';
-svg.setAttribute('width', 1);
-svg.setAttribute('height', 1);
-stageEl.prepend(svg);
-
-fullL = document.createElementNS(SVGNS, 'g'); 
-fullL.id = 'fullL';
-svg.appendChild(fullL);
-
-initFocus();
-initLegend();
-initSearch();
-
-// Первоначальный рендер
-renderView(0, 0);
-if (stageActions) stageActions.hidden = false;
-
-// Подгон масштаба по центру
-setTimeout(() => {
-  fitAll();
-}, 60);
-// ==========================================================================
-// КАРТОЧНЫЙ РЕЖИМ СВАЙПА ВЕТВИ (Вариант А)
-// ==========================================================================
-const branchModal = document.getElementById('branchSwipeView');
-const carouselEl = document.getElementById('branchChildrenCarousel');
-const dotsEl = document.getElementById('carouselDots');
-
-function openBranchSwipeView(familyId) {
-  const fam = D.fams[familyId] || D.fams['F6'] || Object.values(D.fams)[0];
-  if (!fam || !branchModal) return;
-
-  const parents = [fam.h, fam.w].filter(Boolean).map(id => D.people[id]?.name || id).join(' и ');
-  document.getElementById('branchViewHeading').textContent = `Ветвь: ${parents}`;
-  document.getElementById('branchParentsTitle').textContent = parents;
-  document.getElementById('branchViewKidsCount').textContent = `Дети: ${fam.ks.length} человек`;
-  document.getElementById('branchParentsMeta').textContent = `${fam.ks.length} детей`;
-
-  // Рендер карточек детей
-  carouselEl.innerHTML = fam.ks.map((kId, idx) => {
-    const k = D.people[kId];
-    if (!k) return '';
-    const sexClass = k.sex === 'M' ? 'boy' : 'girl';
-    const dates = pDates(kId);
-    const hasDoc = k.status === 'doc' || (k.docs && k.docs.length > 0);
-    return `
-      <div class="child-swipe-card ${sexClass} ${idx === 0 ? 'active' : ''}" data-id="${kId}" data-idx="${idx}">
-        <div>
-          <div class="child-card-header">
-            <span class="child-num-tag">#${idx + 1} ребёнок</span>
-            <span class="child-selected-badge" style="${idx === 0 ? '' : 'display:none;'}">● Выбран</span>
-          </div>
-          <h3 class="child-card-name">${esc(k.given || k.name)}</h3>
-          <div class="child-card-patronymic">${esc(k.lines?.[2] || '')}</div>
-          <div class="child-card-dates">📅 ${esc(dates)}</div>
-        </div>
-        <div>
-          ${hasDoc ? `<div class="child-doc-preview">📖 Метрическая книга (ГАПК)</div>` : ''}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  // Рендер точек пагинации
-  dotsEl.innerHTML = fam.ks.map((_, i) => `<span class="carousel-dot ${i === 0 ? 'active' : ''}"></span>`).join('');
-
-  // Обновление первой цитаты
-  updateExcerpt(fam.ks[0]);
-
-  branchModal.hidden = false;
-  document.body.style.overflow = 'hidden';
-}
-
-function updateExcerpt(personId) {
-  const p = D.people[personId];
-  if (!p) return;
-  document.getElementById('carouselActiveChildName').textContent = p.name;
-  const quote = p.notes?.[0] || (p.events?.[0]?.n ? p.events[0].n : `«Запись в метрической книге о рождении ${p.name}»`);
-  document.getElementById('excerptQuoteText').textContent = quote;
-  document.getElementById('excerptTitle').textContent = `Архивная запись: ${p.name}`;
-}
-
-// Слушатели свайпа и кликов карусели
-if (carouselEl) {
-  carouselEl.addEventListener('click', e => {
-    const card = e.target.closest('.child-swipe-card');
-    if (!card) return;
-    carouselEl.querySelectorAll('.child-swipe-card').forEach(c => {
-      c.classList.remove('active');
-      c.querySelector('.child-selected-badge').style.display = 'none';
-    });
-    card.classList.add('active');
-    card.querySelector('.child-selected-badge').style.display = 'inline';
-    const idx = +card.dataset.idx;
-    dotsEl.querySelectorAll('.carousel-dot').forEach((d, i) => d.classList.toggle('active', i === idx));
-    updateExcerpt(card.dataset.id);
-  });
-}
-
-// Закрытие карточного режима и возврат к общему полотну
-document.getElementById('closeBranchSwipe')?.addEventListener('click', () => {
-  branchModal.hidden = true;
-  document.body.style.overflow = '';
+document.getElementById('help').onclick = () => {
+  lb.querySelector('.box').innerHTML = document.getElementById('helpT').innerHTML;
+  lb.classList.add('open'); lb.scrollTop = 0;
+};
+lb.addEventListener('click', e => {
+  if (e.target === lb || e.target.closest('.close') || lb.classList.contains('img')) { lb.classList.remove('open', 'img'); return; }
+  const b = e.target.closest('[data-go]'); if (b) { lb.classList.remove('open'); select(b.dataset.go); }
 });
-document.getElementById('returnToTreeBtn')?.addEventListener('click', () => {
-  branchModal.hidden = true;
-  document.body.style.overflow = '';
-});
-document.getElementById('openFamilyInTreeBtn')?.addEventListener('click', () => {
-  branchModal.hidden = true;
-  document.body.style.overflow = '';
-  const activeCard = carouselEl.querySelector('.child-swipe-card.active');
-  if (activeCard) select(activeCard.dataset.id);
+function showPanel(id) {
+  const p = D.people[id];
+  const otherParents = otherParentsOf(id);
+  const ev = p.events.filter(e => e.d || e.n || e.pl).map(e => `<div class="ev"><b>${esc(e.t)}${e.d ? ': ' + esc(e.d) : ''}</b>${e.pl ? '<br>' + esc(e.pl) : ''}${e.n ? '<br>' + linkify(e.n) : ''}${e.s ? `<div class="s">${esc(e.s)}${e.pg ? ' · ' + esc(e.pg) : ''}</div>` : ''}</div>`).join('');
+  const mar = p.marr.map(m => `<div class="ev"><b>брак${m.d ? ': ' + esc(m.d) : ''}</b> — с ${esc(pName(m.with))}${m.n ? '<br>' + esc(m.n) : ''}${m.s ? `<div class="s">${esc(m.s)}</div>` : ''}</div>`).join('');
+  const short = p.lines.filter(t => !/\d{4}|^~|^\?/.test(t) && t !== p.kin && t !== '2-я жена Николая').join(' ');
+  panel.innerHTML = `<div class="grab"><button class="tg" aria-label="Свернуть или развернуть карточку"><span>${esc(short)}</span><em class="hd"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><b class="h1t">скрыть</b><b class="h2t">показать</b></em></button><button class="panel-mode" type="button"><span class="reading-enter">На весь экран</span><span class="reading-exit">‹ К схеме</span></button><button class="x close" aria-label="Закрыть">×</button></div><button class="close" aria-label="Закрыть">×</button>
+    ${plateHtml(id)}
+    ${p.est ? `<p class="meta">Год рождения ~${p.est} — примерная оценка по родным.</p>` : ''}
+    ${(p.docs || []).length ? sec('docs', 'Архивные документы', p.docs.length, `<div class="docs">${p.docs.map(d => { const o = D.docs[d]; return `<button class="doc" data-doc="${d}"><img src="${o.img}" alt="" loading="lazy"><span>${esc(o.title)}<small>кадр ${esc(o.frame)} · нажмите, чтобы открыть скан</small></span></button>`; }).join('')}</div>`) : ''}
+    ${sec('par', 'Родители', p.par.length, chips(p.par))}
+    ${sec('sp', 'Супруги', p.sp.length, chips(p.sp))}
+    ${sec('otherParents', 'Другие родители детей', otherParents.length, chips(otherParents))}
+    ${sec('kids', 'Дети', p.kids.length, chips(p.kids))}
+    ${(() => { const h = sibHtml(id); return sec('sib', 'Братья и сёстры', (h.match(/data-go=/g) || []).length, h); })()}
+    ${godHtml(p) ? sec('god', 'Крещение', null, godHtml(p).replace('<h3>Крещение</h3>', '')) : ''}
+    ${ev || mar ? sec('ev', 'События', null, ev + mar) : ''}
+    ${p.notes.length ? sec('notes', 'Заметки', p.notes.length, `<div class="notes">${p.notes.map(n => `<p>${linkify(n)}</p>`).join('')}</div>`) : ''}`;
+  PMIN = false; panel.classList.add('open'); panel.classList.remove('min'); panel.scrollTop = 0;
+}
+// разделы карточки — сворачиваются; какие открыты, запоминаем для следующего человека
+const OPEN = new Set();            // каждый раз все разделы свёрнуты
+const CHEV = '<svg class="cv" width="16" height="16" viewBox="0 0 14 14"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function sec(k, title, n, html) {
+  return `<details class="sec" data-k="${k}"${OPEN.has(k) ? ' open' : ''}><summary><span>${title}</span>${n != null ? `<b>${n}</b>` : ''}${CHEV}</summary><div class="sb">${html}</div></details>`;
+}
+function plateHtml(id) {
+  const p = D.people[id], c = p.card, ln = p.lines.filter(t => !/\d{4}|^~|^\?/.test(t) && t !== p.kin && t !== '2-я жена Николая');
+  const ag = ageOf(id), st_ = p.status === 'doc' ? 'есть архивный документ' : p.status === 'oral' ? 'по преданию' : '';
+  const ph = (p.photos || [])[0];
+  return `<div class="plate" style="--c:${c.strip}">${ph ? `<button class="pph" data-img="${ph}" aria-label="Открыть фотографию"><img src="${ph}" alt="${esc(p.name)}" loading="lazy"></button>` : ''}<div class="pc">${esc(p.clan)}${p.role ? ' · ' + esc(p.role) : ''}</div>
+    <h2>${esc(ln[0] || '')}${ln.length > 1 ? `<span>${esc(ln.slice(1).join(' '))}</span>` : ''}</h2>
+    <div class="pd">${esc(pDates(id)) || 'даты неизвестны'}${ag ? ' · ' + esc(ag) : ''}</div>${st_ ? `<div class="ps">${st_}</div>` : ''}</div>`;
+}
+function setReading(open, moveFocus = false) {
+  if (panel.classList.contains('reading') === open) return;
+  const main = panel.parentElement;
+  if (open) main.style.setProperty('--reading-space', `${panel.getBoundingClientRect().height}px`);
+  else main.style.removeProperty('--reading-space');
+  panel.classList.toggle('reading', open);
+  main.classList.toggle('reading', open);
+  for (const element of [stage, hdr, document.querySelector('footer')]) element.inert = open;
+  if (open) {
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', 'Карточка человека');
+  } else {
+    panel.removeAttribute('role');
+    panel.removeAttribute('aria-modal');
+    panel.removeAttribute('aria-label');
+  }
+  mmView();
+  if (moveFocus) panel.querySelector('.panel-mode')?.focus({preventScroll: true});
+}
+let PMIN = false;                         // на телефоне карточка человека может быть свёрнута в полоску
+function recenter() {                     // после изменения размеров сцены выбранный человек остаётся в кадре
+  if (!focusId || !curPos[focusId]) return;
+  const r = stage.getBoundingClientRect(), c = curPos[focusId];
+  animView(() => { st.x = r.width / 2 - (c.x + CW / 2) * st.s; st.y = r.height * 0.42 - (c.y + CH / 2) * st.s; apply(); });
+}
+panel.addEventListener('click', e => {
+  if (e.target.closest('.panel-mode')) {
+    setReading(!panel.classList.contains('reading'), true);
+    return;
+  }
+  if (e.target.closest('.tg')) { PMIN = !PMIN; panel.classList.toggle('min', PMIN); if (!PMIN) panel.scrollTop = 0; setTimeout(recenter, 280); return; }
+  if (e.target.closest('.close')) return clearSel();
+  const im = e.target.closest('[data-img]'); if (im) { lb.querySelector('.box').innerHTML = `<button class="close" aria-label="Закрыть">×</button><img src="${im.dataset.img}" alt="">`; lb.classList.add('open', 'img'); return; }
+  const dc = e.target.closest('[data-doc]'); if (dc) return openDoc(dc.dataset.doc);
+  const b = e.target.closest('[data-go]'); if (b) select(b.dataset.go);
 });
 
-// Кнопка вызова из мобильного меню:
-document.getElementById('branchToggle')?.addEventListener('click', () => {
-  // На мобильном можно сразу открыть свайп текущей выбранной ветви:
-  openBranchSwipeView('F6'); // Ветвь Долмата и Ксении
+/* --- поиск --- */
+const q = document.getElementById('q'), res = document.getElementById('results');
+q.addEventListener('input', () => {
+  const t = norm(q.value.trim()); if (t.length < 2) { res.style.display = 'none'; return; }
+  const stem = w => w.length > 4 ? w.replace(/(ых|их|ой|ей|ою|ею|ие|ии|ию|ья|ью|ым|им|ом|ем|ам|ах|ы|и|а|я|у|ю|е)$/, '') : w;
+  const words = t.split(/\s+/).map(stem);
+  const hits = Object.entries(D.people).filter(([id, p]) => { const n = norm(p.lines.join(' ') + ' ' + (p.alt || []).join(' ')); return words.every(w => n.includes(w)); }).slice(0, 30);
+  res.innerHTML = hits.length ? hits.map(([id, p]) => { const via = (p.alt || []).find(a => words.every(w => norm(a).includes(w)) && !words.every(w => norm(p.lines.join(' ')).includes(w)));
+    return `<button data-go="${id}">${esc(p.name)} <small>${esc(pDates(id))}${via ? ' · также: ' + esc(via) : ''}</small></button>`; }).join('') : '<button disabled>Никого не нашлось</button>';
+  res.style.display = 'block';
 });
-})();
+res.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) { select(b.dataset.go); res.style.display = 'none'; q.blur(); } });
+addEventListener('click', e => { if (!e.target.closest('.search')) res.style.display = 'none'; });
+
+/* --- загрузка --- */
+function start() {
+  try {
+    D = initialData;
+    VIEWS = initialViews;
+    document.getElementById('loading').remove();
+    stage.insertAdjacentHTML('afterbegin', '<svg xmlns="http://www.w3.org/2000/svg" id="tree" font-family="DejaVu Sans, Verdana, sans-serif"></svg>');
+    svg = stage.querySelector('svg'); svg.style.overflow = 'visible';
+    initFocus();
+    fullL = document.createElementNS(SVGNS, 'g'); fullL.id = 'fullL'; svg.insertBefore(fullL, focL);
+    viewCardsG = mkG('viewCards', ''); fullL.appendChild(viewCardsG);
+    chipsG = mkG('chips', ''); svg.appendChild(chipsG);
+    buildAnch(); buildLegend();
+    { const n = Object.keys(D.people).length, w = n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'человека' : 'человек'; document.getElementById('total').textContent = `${n} ${w} на схеме · `; }
+    renderView(0, 0);
+    stageActions.hidden = false;
+    fitAll();
+    if (matchMedia('(max-width:760px)').matches && VIEW.cards.I5 && VIEW.cards.I7) {
+      // по центру — Николай с жёнами; по высоте — так, чтобы сверху были видны его родители и деды, снизу — дети
+      const a = VIEW.cards.I5, b = VIEW.cards.I7, r = stage.getBoundingClientRect();
+      const cx = (Math.min(a[0], b[0]) + Math.max(a[0], b[0]) + CW) / 2, cy = a[1] + CH / 2;
+      st.s = 0.7; st.x = r.width / 2 - cx * st.s; st.y = r.height * 0.6 - cy * st.s; apply();
+    }
+    setTimeout(() => { const h = document.getElementById('hint'); if (h) h.remove(); }, 6000);
+  } catch (err) {
+    const l = document.getElementById('loading');
+    if (l) l.textContent = 'Не удалось показать древо: ' + err;
+  }
+}
+window.__dbg = {st: () => [MASK, BMASK, viewCardsG.querySelectorAll('.person').length, Object.keys(VIEW.cards).length], fitFocus: () => { const v = Object.values(curPos), xs = v.map(q => q.x), ys = v.map(q => q.y); fitBox(Math.min(...xs) - 20, Math.min(...ys) - 20, Math.max(...xs) - Math.min(...xs) + CW + 40, Math.max(...ys) - Math.min(...ys) + CH + 40, 10); }, zoomTo: p => { const c = VIEW.cards[p]; fitBox(c[0] - 200, c[1] - 150, CW + 400, CH + 300, 10); }};
+start();
+
+})().catch(error => {
+  const loading = document.getElementById('loading');
+  if (loading) loading.textContent = location.protocol === 'file:'
+    ? 'Для этой версии откройте сайт по HTTP/HTTPS: загрузите папку site на хостинг или используйте локальный веб-сервер.'
+    : 'Не удалось загрузить данные древа: ' + error.message;
+});

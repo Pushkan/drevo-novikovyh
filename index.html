@@ -2,272 +2,109 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Родословная Новиковых из д. Чикаши</title>
-<link rel="stylesheet" href="css/styles.css?v=2.11.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Родословная Новиковых из д.Чикаши</title>
+<link rel="stylesheet" href="css/styles.css?v=2.10.30">
 </head>
 <body>
 <header>
-  <h1>Родословная Новиковых<small><span id="total"></span>д. Чикаши и породнившиеся семьи · нажмите на человека для фокуса</small></h1>
-  
-  <div class="search">
-    <input id="q" type="search" placeholder="Поиск по имени или фамилии…" autocomplete="off" aria-label="Поиск персоны по имени или фамилии">
-    <div id="results" role="listbox" aria-label="Результаты поиска"></div>
-  </div>
-
+  <h1>Родословная Новиковых из д.Чикаши<small><span id="total"></span>и породнившиеся с ними семьи · нажмите на человека — схема перестроится вокруг него</small></h1>
+  <div class="search"><input id="q" type="search" placeholder="Имя, фамилия или девичья фамилия…" autocomplete="off" aria-label="Поиск по имени"><div id="results" role="listbox"></div></div>
   <div class="tools">
-    <button id="help" type="button" aria-label="Инструкция к схеме">
-      <span class="help-text">Инструкция</span>
-      <span class="help-icon" aria-hidden="true">?</span>
-    </button>
-    <button id="allg" type="button" class="main">Раскрыть всё</button>
+    <button id="help" type="button" aria-label="Инструкция"><span class="help-text">Инструкция</span><span class="help-icon" aria-hidden="true">?</span></button>
+    <button id="allg">Раскрыть всё</button>
   </div>
-
-  <nav id="legend" aria-label="Фильтр по родам"></nav>
+  <nav id="legend" aria-label="Рода"></nav>
 </header>
-
 <main>
-  <div id="stage">
-    <div id="loading">Загружаю древо…</div>
-    <div id="mm" aria-hidden="true" title="Миникарта древа">
-      <svg id="mmS" xmlns="http://www.w3.org/2000/svg">
-        <g id="mmC"></g>
-        <rect id="mmV" fill="#4a7c5922" stroke="#4a7c59" stroke-width="1.2"/>
-      </svg>
-    </div>
-    <div id="hint">Тяните, чтобы перемещаться · масштаб: колесико, два пальца или двойной тап</div>
-  </div>
-
+  <div id="stage"><div id="loading">Загружаю древо…</div><div id="mm" aria-hidden="true"><svg id="mmS" xmlns="http://www.w3.org/2000/svg"><g id="mmC"></g><rect id="mmV" fill="#c8553d22" stroke="#c8553d" stroke-width="1"/></svg></div><div id="hint">Тяните, чтобы двигать · двойной тап, колесо или два пальца — масштаб</div></div>
   <div id="overviewLabels" class="overview-labels" role="group" aria-label="Семьи на общем плане" hidden></div>
-
-  <!-- Мобильные быстрые действия над холстом -->
   <div class="stage-actions" id="stageActions" hidden>
     <button id="clanToggle" type="button" aria-haspopup="dialog">Роды</button>
     <button id="branchToggle" type="button" aria-haspopup="dialog">Ветви</button>
     <details id="zoomMenu">
-      <summary aria-label="Управление масштабом">Масштаб</summary>
-      <div class="zoom-options" role="group" aria-label="Кнопки зума">
-        <button type="button" data-zoom="in" aria-label="Приблизить древо">+</button>
-        <button type="button" data-zoom="out" aria-label="Отдалить древо">−</button>
-        <button type="button" data-zoom="fit">Вписать</button>
+      <summary>Масштаб</summary>
+      <div class="zoom-options" role="group" aria-label="Управление масштабом">
+        <button type="button" data-zoom="in" aria-label="Приблизить">+</button>
+        <button type="button" data-zoom="out" aria-label="Отдалить">−</button>
+        <button type="button" data-zoom="fit">Вписать схему</button>
       </div>
     </details>
   </div>
-
-  <!-- Боковая карточка-шторка персоны -->
-  <aside id="panel" aria-live="polite" aria-label="Карточка персоны"></aside>
-
-  <!-- ==========================================================================
-     МОДАЛЬНЫЙ / ПОЛНОЭКРАННЫЙ РЕЖИМ: КАРТОЧНЫЙ СВАЙП ВЕТВИ (FAMILY BRANCH VIEW)
-     Вставьте этот блок в index.html перед закрывающим тегом </main>
-     ========================================================================== -->
-
-<div id="branchSwipeView" class="branch-swipe-modal" hidden aria-label="Карточный просмотр ветви">
-  <!-- Верхняя панель ветви -->
-  <header class="branch-view-header">
-    <div class="branch-view-title-wrap">
-      <div class="branch-view-icon" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
-          <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
-          <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
-          <path d="M10 6.5h4M17.5 10v4"></path>
-        </svg>
-      </div>
-      <div>
-        <h2 id="branchViewHeading">Ветвь Долмата Новикова</h2>
-        <div class="branch-view-sub">
-          <span id="branchViewKidsCount">Дети: 11 человек</span>
-          <span class="branch-view-pill">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="m17 2 4 4-4 4"></path>
-              <path d="M3 11v-1a4 4 0 0 1 4-4h14"></path>
-              <path d="m7 22-4-4 4-4"></path>
-              <path d="M21 13v1a4 4 0 0 1-4 4H3"></path>
-            </svg>
-            свайп влево-вправо
-          </span>
-        </div>
-      </div>
-    </div>
-    <div class="branch-view-badges">
-      <span class="badge-revision">X ревизия · 1858 г.</span>
-      <span class="badge-records">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-        </svg>
-        <span id="branchViewDocsCount">8 записей метрик</span>
-      </span>
-      <button type="button" class="branch-view-close" id="closeBranchSwipe" aria-label="Вернуться к схеме">✕</button>
-    </div>
-  </header>
-
-  <!-- Карточка родителей ветви -->
-  <div class="branch-parents-card" id="branchParentsCard">
-    <div class="branch-parents-avatar">
-      <div class="avatar-placeholder">👨‍👩‍👧</div>
-    </div>
-    <div class="branch-parents-info">
-      <div class="parents-names-row">
-        <b id="branchParentsTitle">Долмат и Ксения</b>
-        <span class="verified-icon" title="Подтверждено в архиве">✓</span>
-      </div>
-      <div class="parents-meta" id="branchParentsMeta">1838–1904 · 11 детей</div>
-    </div>
-    <button type="button" class="parents-action-btn" id="branchFocusParents" title="Показать пару в общем древе" aria-label="Показать в древе">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-        <circle cx="9" cy="7" r="4"></circle>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-      </svg>
-    </button>
-  </div>
-
-  <!-- Временная шкала поколения -->
-  <div class="branch-timeline-bar">
-    <div class="timeline-line"></div>
-    <div class="timeline-pointer" id="branchTimelinePointer"></div>
-  </div>
-
-  <!-- Кнопки быстрой навигации влево / вправо -->
-  <div class="branch-carousel-nav">
-    <button type="button" class="carousel-nav-btn prev" id="carouselPrevBtn">
-      ← <span id="carouselPrevLabel">старшие</span>
-    </button>
-    <button type="button" class="carousel-nav-btn next" id="carouselNextBtn">
-      <span id="carouselNextLabel">младшие</span> →
-    </button>
-  </div>
-
-  <!-- Горизонтальная карусель карточек детей (свайп пальцем) -->
-  <div class="branch-children-carousel" id="branchChildrenCarousel" tabindex="0" role="region" aria-label="Список детей ветви">
-    <!-- Динамически заполняется карточками детей -->
-  </div>
-
-  <!-- Индикатор пагинации / точки свайпа -->
-  <div class="carousel-pagination-wrap">
-    <div class="carousel-info-text">
-      <span id="carouselRangeInfo">Показан ребёнок</span>
-      <b id="carouselActiveChildName">—</b>
-    </div>
-    <div class="carousel-dots" id="carouselDots">
-      <!-- Точки генерируются скриптом -->
-    </div>
-  </div>
-
-  <!-- Выдержка из архивного документа (метрическая запись выбранного ребёнка) -->
-  <div class="branch-archive-excerpt" id="branchArchiveExcerpt">
-    <div class="archive-excerpt-header">
-      <div class="archive-excerpt-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-          <path d="M22 3h-6a4 4 0 0 1-4 4v14a3 3 0 0 1 3-3h7z"></path>
-        </svg>
-      </div>
-      <div class="archive-excerpt-titles">
-        <b id="excerptTitle">Архивная запись</b>
-        <small id="excerptSource">Метрическая книга прихода д. Чикаши</small>
-      </div>
-      <button type="button" class="archive-open-btn" id="openFullExcerptDoc" title="Открыть скан целиком" aria-label="Открыть документ">↗</button>
-    </div>
-    <blockquote class="archive-excerpt-quote" id="excerptQuoteText">
-      «...деревни Чикашей крестьянин...»
-    </blockquote>
-  </div>
-
-  <!-- Нижняя панель действий режима -->
-  <footer class="branch-view-bottom-bar">
-    <button type="button" class="btn-bottom-action" id="openFamilyInTreeBtn">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"></circle>
-        <line x1="12" y1="8" x2="12" y2="12"></line>
-        <line x1="12" y1="16" x2="12.01" y2="16"></line>
-      </svg>
-      В древо
-    </button>
-    <button type="button" class="btn-bottom-primary" id="returnToTreeBtn">
-      К общей схеме
-    </button>
-  </footer>
-</div>
-
-  
+  <aside id="panel" aria-live="polite"></aside>
 </main>
-
-<footer>
-  <span>Разработка — Павел Железняк</span>
-  <button id="ver" type="button" title="История изменений проекта">v2.11.0</button>
-</footer>
-
-<!-- Мобильный диалог: Ветви древа -->
+<footer>Разработка — Павел Железняк<button id="ver" title="История изменений">v2.10.30</button></footer>
 <dialog class="stage-dialog" id="branchDialog" aria-labelledby="branchTitle">
   <div class="stage-dialog-heading">
     <h2 id="branchTitle">Ветви на схеме</h2>
-    <form method="dialog"><button type="submit" aria-label="Закрыть окно ветвей">×</button></form>
+    <form method="dialog"><button type="submit" aria-label="Закрыть ветви">×</button></form>
   </div>
-  <div class="branch-actions" role="group" aria-label="Действия со всеми ветвями">
+  <div class="branch-actions" role="group" aria-label="Все ветви">
     <button type="button" id="expandBranches">Раскрыть всё</button>
     <button type="button" id="collapseBranches">Свернуть всё</button>
   </div>
   <div class="stage-list" id="branchList"></div>
 </dialog>
-
-<!-- Мобильный диалог: Роды -->
 <dialog class="stage-dialog" id="clanDialog" aria-labelledby="clanTitle">
   <div class="stage-dialog-heading">
     <h2 id="clanTitle">Роды на схеме</h2>
-    <form method="dialog"><button type="submit" aria-label="Закрыть окно родов">×</button></form>
+    <form method="dialog"><button type="submit" aria-label="Закрыть роды">×</button></form>
   </div>
   <div class="stage-list" id="clanList"></div>
 </dialog>
-
-<!-- Полноэкранный модальный просмотр (Инструкция / Архивные сканы) -->
-<div id="lb" role="dialog" aria-modal="true" aria-label="Просмотр документа"><div class="box"></div></div>
-
-<!-- Шаблон справки/инструкции -->
+<div id="lb" role="dialog" aria-modal="true"><div class="box"></div></div>
 <template id="helpT">
-  <button class="close" type="button" aria-label="Закрыть справку">×</button>
-  <h2>Как читать схему</h2>
-  
-  <h3>Карточки персон</h3>
-  <ul>
-    <li><b>Светло-голубая</b> карточка — мужчина, <b>сливочно-тёплая</b> — женщина.</li>
-    <li><b>Цветная полоска слева</b> — род человека (Новиковы, Белозеровы, Кутрюмовы, Левкины, Бобровы, Бычины, Логиновы, Шестаковы, Железняки). Род ведётся по отцу. Цвета вынесены в легенду под шапкой.</li>
-    <li><b>Масштабирование информации</b>: на общем плане показаны компактные подписи семей; на среднем масштабе — имена, фамилии и годы жизни; при приближении открываются полные отчества, девичьи фамилии, точные даты и возраст.</li>
-    <li><b>Выразительный контур</b> — персона подтверждена архивными источниками (метрическими книгами, ревизскими сказками).</li>
-    <li><b>Пунктирная рамка</b> — персона известна только по семейным воспоминаниям.</li>
-    <li>При выборе человека на карточках родственников отображается степень родства относительно него: «отец», «бабушка», «прадед», «сестра», «сын», «невестка»…</li>
-  </ul>
-
-  <h3>Даты и условные обозначения</h3>
-  <ul>
-    <li>«07.03.1877 – 11.05.1949» — точные даты рождения и смерти по метрикам.</li>
-    <li>«ок. 1848» — год рассчитан по возрасту в ревизской сказке или документе.</li>
-    <li>«~1850» — примерный год, оценённый по окружению и родственникам.</li>
-    <li>Даты до 1918 года приведены по старому стилю (по юлианскому календарю метрик).</li>
-  </ul>
-
-  <h3>Ветви и навигация</h3>
-  <ul>
-    <li>Кнопка «Раскрыть всё» разворачивает все скрытые ветви и боковые рода. Кнопка «Свернуть всё» возвращает древо к основному стволу Новиковых.</li>
-    <li>Цветные язычки под карточками (например, <i>«＋ Белозеровы и Бобровы · 26»</i>) позволяют разворачивать конкретные интересующие ветви прямо на полотне.</li>
-    <li>На смартфонах снизу доступны удобные кнопки: <b>«Ветви»</b>, <b>«Роды»</b> и меню <b>«Масштаб»</b>.</li>
-    <li>В шторке персоны кнопка <b>«На весь экран»</b> позволяет комфортно изучить архивные метрические выписи, события и заметки на мобильном устройстве.</li>
-  </ul>
-
-  <h3>Управление полотном</h3>
-  <ul>
-    <li><b>Перемещение</b>: зажмите левую кнопку мыши или проведите пальцем по экрану.</li>
-    <li><b>Масштаб</b>: колесико мыши, жест двумя пальцами (pinch-to-zoom) или двойной тап.</li>
-    <li><b>Выбор</b>: нажмите на карточку — древо центрируется и перестроится в режим фокуса вокруг выбранного родственника.</li>
-  </ul>
+<button class="close" aria-label="Закрыть">×</button>
+<h2>Как читать схему</h2>
+<h3>Карточки</h3>
+<ul>
+<li><b>Светло-голубая</b> карточка — мужчина, <b>сливочная</b> — женщина.</li>
+<li><b>Цветная полоска слева</b> — род человека (Новиковы, Белозеровы, Кутрюмовы, Левкины, Бобровы, Бычины, Логиновы, Шестаковы, Железняки). Род считается по отцу; жена с неизвестными родителями — в роду мужа. Цвета — в легенде под заголовком схемы.</li>
+<li>На общем плане видны подписи семей. Нажмите на подпись, чтобы приблизиться. На среднем масштабе видны имена, фамилии и годы жизни. При приближении добавляются отчества, девичьи фамилии и точные даты, если они известны.</li>
+<li><b>Толстая рамка</b> — человек найден в архивных документах (метриках, ревизских сказках).</li>
+<li><b>Пунктирная рамка карточки</b> — известен только по семейному преданию.</li>
+<li>Когда выбран человек, на карточках его родных появляется подпись — кем они ему приходятся: «отец», «бабушка», «пра(3)дед», «сестра», «внучка», «зять»…</li>
+</ul>
+<h3>Даты</h3>
+<ul>
+<li>«07.03.1877 – 11.05.1949» — точные даты рождения и смерти; если указана одна дата — это дата рождения, а дата смерти неизвестна или человек жив.</li>
+<li>«ок. 1848» — год вычислен по возрасту в документе.</li>
+<li>«~1850» — год примерно оценён по родственникам, документов нет.</li>
+<li>Даты XIX века — по старому стилю, как в метрических книгах.</li>
+</ul>
+<p>На телефоне кнопка <b>«Ветви»</b> открывает список с крупными кнопками, а <b>«Масштаб»</b> позволяет приблизить, отдалить или вписать схему. В карточке человека можно нажать <b>«На весь экран»</b> и затем вернуться к схеме.</p>
+<h3>Свёрнутые рода</h3>
+<ul>
+<li>Сначала показаны Новиковы из Чикашей. Семьи, из которых в род пришли жёны и мужья, свёрнуты, и большие ветви внуков Николая и Ефросиньи — тоже.</li>
+<li>Цветной язычок под карточкой, например «＋ Белозеровы и Бобровы · 26» или «＋ потомки Раисы · 19», — нажмите, и эта часть раскроется: схема перестроится, а нажатое место останется на экране. Белый язычок «− свернуть» сворачивает обратно.</li>
+<li>Кнопка «Раскрыть всё» раскрывает все рода и ветви, «Свернуть всё» возвращает исходный вид. На телефоне обе команды находятся в списке «Ветви».</li>
+<li>На компьютере список родов под заголовком, на телефоне — по кнопке «Роды» внизу. Выбор рода покажет его на схеме и приглушит остальные карточки.</li>
+</ul>
+<h3>Семьи и рамки</h3>
+<ul>
+<li>Каждое поколение — в своём ряду: старшие сверху, младшие снизу.</li>
+<li><b>Серая рамка</b> «дети: Николай и Ефросинья» — братья и сёстры, дети одной пары. Стоят не всегда по возрасту, а так, чтобы быть над своими детьми.</li>
+<li><b>Белая пунктирная подложка</b> «жена», «муж», «1-я жена» — супруг из другой семьи (его родители неизвестны), рядом со своим мужем или женой.</li>
+<li>«Братья (родители неизвестны)» — Павел и Филипп Бычины.</li>
+</ul>
+<h3>Линии</h3>
+<ul>
+<li>Супруги соединены горизонтальной линией, точка на ней — брак. От неё линия идёт вниз к общей горизонтали и к каждому ребёнку.</li>
+<li>У каждой семьи свой цвет линий, соседние линии — разных цветов: семью можно проследить по цвету.</li>
+<li>Справа вверху — семья Савелия Григорьевича Новикова: соседи из той же деревни, родство не доказано.</li>
+</ul>
+<h3>Как пользоваться</h3>
+<ul>
+<li>Двигать — мышкой или пальцем; масштаб — колёсиком, двумя пальцами, или двойным тапом (двойным щелчком).</li>
+<li>Нажмите на человека — подсветятся его предки, потомки и супруги, а сбоку откроется карточка: даты, события с источниками, заметки, фото, крёстные, родители, братья и сёстры, супруги, дети.</li>
+<li>«В архивных документах» — сканы, где человек упомянут; по нажатию скан открывается крупно, с расшифровкой и ссылкой на дело в Пермском архиве.</li>
+<li>Поиск — по имени, фамилии или девичьей фамилии.</li>
+<li>Нажмите на человека — схема перестроится вокруг него: сверху его предки, рядом братья, сёстры и супруги, снизу потомки. Закрыть — крестик, Esc или нажатие на пустое место.</li>
+</ul>
 </template>
-
 <script src="js/error-handler.js" defer></script>
-<script src="js/view-layout.js?v=2.11.0" defer></script>
-<script src="js/macro-layout.js?v=2.11.0" defer></script>
-<script src="js/app.js?v=2.11.0" defer></script>
+<script src="js/view-layout.js?v=2.10.30" defer></script>
+<script src="js/macro-layout.js?v=2.10.30" defer></script>
+<script src="js/app.js?v=2.10.30" defer></script>
 </body>
 </html>
