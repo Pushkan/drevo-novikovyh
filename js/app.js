@@ -6,95 +6,35 @@ const loadJSON = async path => {
   return response.json();
 };
 const [initialData, initialViews] = await Promise.all([
-  loadJSON('data/tree-data.json?v=2.10.30'),
-  loadJSON('data/tree-views.json?v=2.10.30')
+  loadJSON('data/tree-data.json?v=2.10.19'),
+  loadJSON('data/tree-views.json?v=2.10.19')
 ]);
 
 const stage = document.getElementById('stage'), panel = document.getElementById('panel');
-const mobile = matchMedia('(max-width:760px)');
-const stageActions = document.getElementById('stageActions');
-const overviewLayer = document.getElementById('overviewLabels');
-const zoomMenu = document.getElementById('zoomMenu');
-const branchDialog = document.getElementById('branchDialog');
-const branchList = document.getElementById('branchList');
-const allButton = document.getElementById('allg');
-const expandBranches = document.getElementById('expandBranches');
-const collapseBranches = document.getElementById('collapseBranches');
-const clanDialog = document.getElementById('clanDialog');
-const clanList = document.getElementById('clanList');
-// The controls share the stage's size but sit outside its gesture surface.
-stage.append(overviewLayer, stageActions);
 let svg = null, D = null, W = 1, H = 1;
 const st = {s: 1, x: 0, y: 0};
 let movT = null;
-const OVERVIEW_SCALE = 0.55, BLEND_START = 0.63, BLEND_END = 0.47;
-const inOverview = () => st.s <= OVERVIEW_SCALE;
-const overviewScale = () => st.s / OVERVIEW_SCALE;
-const FARZ = 0.85;                       // ниже порога видны имя, фамилия и годы
+const FARZ = 0.85;                       // мельче этого масштаба на карточках — только крупные фамилия и имя
 let isFar = null;
 const apply = () => { if (!svg) return; svg.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`;
   const f = st.s < FARZ; if (f !== isFar) { isFar = f; svg.classList.toggle('far', f); }
-  const mix = Math.max(0, Math.min(1, (BLEND_START - st.s) / (BLEND_START - BLEND_END)));
-  const opacity = mix * mix * (3 - 2 * mix);
-  const overview = inOverview();
-  svg.style.opacity = 1 - opacity;
-  svg.classList.toggle('overview', overview);
-  svg.setAttribute('aria-hidden', overview);
-  overviewLayer.hidden = false;
-  overviewLayer.inert = !overview;
-  overviewLayer.style.opacity = opacity;
-  if (mix > 0) paintMacro();
   mmView();
 };
 // ускорение (готовый «снимок» схемы) — только при перетаскивании: масштаб не меняется, текст остаётся чётким.
 // При масштабировании его выключаем, чтобы браузер перерисовывал схему в каждом кадре.
 const panning = () => { if (!svg) return; svg.classList.add('moving'); clearTimeout(movT); movT = setTimeout(() => svg.classList.remove('moving'), 250); };
-const clampS = s => Math.max(0.001, Math.min(4, s));
+const clampS = s => Math.max(0.03, Math.min(4, s));
 function zoomAt(f, cx, cy) {
-  stopMacroZoom();
   if (svg) { clearTimeout(movT); svg.classList.remove('moving'); }
-  const next = clampS(st.s * f);
-  if (next < BLEND_START) {
-    ensureOverview();
-    if (next <= macroFit().scale * OVERVIEW_SCALE) { fitAll(); return; }
-  }
-  macroFitted = false;
-  const enter = st.s >= BLEND_START && next < BLEND_START;
-  const leave = st.s <= BLEND_END && next > BLEND_END;
-  const from = enter ? nearestMacro(cx, cy, true) : leave ? nearestMacro(cx, cy) : null;
-  const ratio = next / st.s;
-  st.x = cx - (cx - st.x) * ratio;
-  st.y = cy - (cy - st.y) * ratio;
-  if (macroOffset) {
-    macroOffset.x = cx - (cx - macroOffset.x) * ratio;
-    macroOffset.y = cy - (cy - macroOffset.y) * ratio;
-  }
-  st.s = next;
-  if (from && enter) {
-    alignMacro(from, st.x + from.target.x * next, st.y + from.target.y * next);
-  }
-  if (from && leave) {
-    const pt = macroPoint(from);
-    st.x = pt.x - from.target.x * next;
-    st.y = pt.y - from.target.y * next;
-  }
-  apply();
+  const ns = clampS(st.s * f); const k = ns / st.s;
+  st.x = cx - (cx - st.x) * k; st.y = cy - (cy - st.y) * k; st.s = ns; apply();
 }
 function fitBox(x, y, w, h, pad = 40) {
   const r = stage.getBoundingClientRect();
   const s = clampS(Math.min((r.width - 2 * pad) / w, (r.height - 2 * pad) / h, 1.6));
-  if (s < BLEND_START) { fitAll(); return; }
-  stopMacroZoom();
-  macroFitted = false;
   st.s = s; st.x = (r.width - w * s) / 2 - x * s; st.y = (r.height - h * s) / 2 - y * s; apply();
 }
-const fitAll = () => {
-  stopMacroZoom();
-  ensureOverview();
-  macroFitted = true;
-  st.s = macroFit().scale * OVERVIEW_SCALE;
-  apply();
-};
+const fitAll = () => fitBox(0, 0, W, H, 10);
 const norm = t => (t || '').toLowerCase().replace(/ё/g, 'е');
 const esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const linkify = t => esc(t).replace(/https?:\/\/[^\s)»,;]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
@@ -115,14 +55,8 @@ function tapAction(x, y) {
   mm.addEventListener('pointerup', e => { e.stopPropagation(); dn = false; });
 }
 stage.addEventListener('pointerdown', e => {
-  if (stageActions.contains(e.target)) return;
-  stopMacroZoom();
-  zoomMenu.open = false;
-  if (!e.target.closest('.overview-label')) {
-    e.preventDefault(); var _s=window.getSelection&&window.getSelection(); if(_s) _s.removeAllRanges();
-    stage.setPointerCapture(e.pointerId);
-  }
-  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY}); moved = 0;
+  e.preventDefault(); var _s=window.getSelection&&window.getSelection(); if(_s) _s.removeAllRanges();
+  stage.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY}); moved = 0;
   if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = {d: Math.hypot(a.x - b.x, a.y - b.y)}; }
   last = {x: e.clientX, y: e.clientY}; stage.classList.add('drag');
 });
@@ -135,40 +69,10 @@ stage.addEventListener('pointermove', e => {
     zoomAt(d / pinch.d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top); pinch.d = d; moved += 10; return;
   }
   const dx = e.clientX - last.x, dy = e.clientY - last.y; moved += Math.abs(dx) + Math.abs(dy);
-  if (inOverview() && macroOffset) {
-    if (moved >= 6) {
-      if (!stage.hasPointerCapture(e.pointerId)) stage.setPointerCapture(e.pointerId);
-      if (!macroFitted) {
-        macroOffset.x += dx; macroOffset.y += dy;
-        st.x += dx; st.y += dy;
-        apply();
-      }
-    }
-    last = {x: e.clientX, y: e.clientY};
-    return;
-  }
-  if (st.s < BLEND_START && macroOffset) {
-    macroOffset.x += dx; macroOffset.y += dy;
-  }
   st.x += dx; st.y += dy; last = {x: e.clientX, y: e.clientY}; panning(); apply();
 });
 const up = e => {
-  if (!ptrs.has(e.pointerId)) return;
   ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; stage.classList.remove('drag');
-  if (inOverview()) {
-    if (e.type === 'pointerup' && moved < 6 && overviewScale() < 0.28 &&
-        !e.target.closest('.overview-label')) {
-      const rect = stage.getBoundingClientRect();
-      const x = e.clientX - rect.left, y = e.clientY - rect.top;
-      const node = nearestMacro(x, y);
-      if (node) {
-        const point = macroPoint(node);
-        if (Math.hypot(point.x - x, point.y - y) < 18) zoomToMacro(node);
-      }
-    }
-    if (ptrs.size === 1) last = [...ptrs.values()][0];
-    return;
-  }
   if (e.type === 'pointerup' && moved < 6 && ptrs.size === 0) {
     const now = Date.now(), r0 = stage.getBoundingClientRect();
     if (now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
@@ -190,77 +94,16 @@ const up = e => {
   if (ptrs.size === 1) last = [...ptrs.values()][0];
 };
 stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
-stage.addEventListener('wheel', e => { if (stageActions.contains(e.target)) return; e.preventDefault(); const r = stage.getBoundingClientRect();
+stage.addEventListener('wheel', e => { e.preventDefault(); const r = stage.getBoundingClientRect();
   zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, {passive: false});
 const center = () => { const r = stage.getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
-zoomMenu.addEventListener('click', e => {
-  const button = e.target.closest('[data-zoom]');
-  if (!button) return;
-  if (button.dataset.zoom === 'fit') {
-    clearSel();
-    animView(fitAll);
-    zoomMenu.open = false;
-    zoomMenu.querySelector('summary').focus();
-    return;
-  }
-  const step = button.dataset.zoom === 'in' ? 1.25 : 1 / 1.25;
-  zoomAt(step, ...center());
-});
-function renderBranchList() {
-  branchList.innerHTML = branchControls(VIEW).map(({group, index, title, count, open, color}) => {
-    const detail = open
-      ? '<span class="branch-state">Развёрнута</span> · Свернуть ветвь'
-      : `Раскрыть ветвь · ${count} ${ppl(count)}`;
-    return `<button type="button" data-${group ? 'g' : 'b'}="${index}" aria-expanded="${Boolean(open)}"><i style="--branch-color:${color}" aria-hidden="true"></i><span>${esc(title)}<small>${detail}</small></span><b aria-hidden="true">${open ? '−' : '+'}</b></button>`;
-  }).join('');
-}
-document.getElementById('branchToggle').onclick = () => {
-  zoomMenu.open = false;
-  renderBranchList();
-  branchDialog.showModal();
-};
-branchList.addEventListener('click', e => {
-  const button = e.target.closest('button[data-g], button[data-b]');
-  if (!button) return;
-  const scrollTop = branchDialog.scrollTop;
-  const group = button.dataset.g != null;
-  const index = +(group ? button.dataset.g : button.dataset.b);
-  const anchor = group ? VIEWS.groups[index][1] || 'I35' : VIEWS.branches[index][0];
+document.getElementById('allg').onclick = () => {
   clearSel();
-  if (group) toggleGroup(index);
-  else toggleBranch(index);
-  renderBranchList();
-  branchList.querySelector(`[data-${group ? 'g' : 'b'}="${index}"]`)?.focus({preventScroll: true});
-  branchDialog.scrollTop = scrollTop;
-  // A list action can come from anywhere on the sheet, so bring its branch into view.
-  const [x, y] = VIEW.cards[anchor];
-  const [cx, cy] = center();
-  animView(() => { st.x = cx - (x + CW / 2) * st.s; st.y = cy - (y + CH / 2) * st.s; apply(); });
-});
-mobile.addEventListener('change', e => {
-  if (e.matches) return;
-  setReading(false);
-  zoomMenu.open = false;
-  if (branchDialog.open) branchDialog.close();
-  if (clanDialog.open) clanDialog.close();
-});
-function setAllBranches(expand) {
-  if (branchDialog.open) branchDialog.close();
-  clearSel();
-  renderView(expand ? ALLG() : 0, expand ? ALLB() : 0);
+  const all = MASK === ALLG() && BMASK === ALLB();
+  renderView(all ? 0 : ALLG(), all ? 0 : ALLB());
   setTimeout(() => animView(fitAll), 50);
-}
-const allBranchesOpen = () => MASK === ALLG() && BMASK === ALLB();
-allButton.onclick = () => setAllBranches(!allBranchesOpen());
-expandBranches.onclick = () => setAllBranches(true);
-collapseBranches.onclick = () => setAllBranches(false);
-addEventListener('keydown', e => {
-  if (e.key !== 'Escape' || branchDialog.open || clanDialog.open) return;
-  if (lb.classList.contains('open')) lb.classList.remove('open', 'img');
-  else if (panel.classList.contains('reading')) setReading(false, true);
-  else if (zoomMenu.open) { zoomMenu.open = false; zoomMenu.querySelector('summary').focus(); }
-  else clearSel();
-});
+};
+addEventListener('keydown', e => { if (e.key === 'Escape') { if (lb.classList.contains('open')) lb.classList.remove('open', 'img'); else clearSel(); } });
 
 /* --- выделение родни --- */
 function relatives(id) {
@@ -278,7 +121,7 @@ function bboxOf(ids) {
   return [x1, y1, x2 - x1, y2 - y1];
 }
 /* ===== Релиз 2: режим «фокус» — раскладка вокруг выбранного человека прямо в браузере ===== */
-const CW = 126, CH = 86, IG = 6, PADF = 8, FG = 28, ROWH = CH + 120, AGAP = 28;
+const CW = 126, CH = 86, IG = 10, PADF = 9, KG = 16, FG = 30, ROWH = CH + 120, AGAP = 26;
 const SVGNS = 'http://www.w3.org/2000/svg';
 let famsOf = {}, parentFam = {}, fullL = null, focL = null, focusId = null, curPos = {};
 
@@ -340,7 +183,7 @@ function measure(p, depth) {
     let cont = null;
     kids.forEach(k => {
       if (!cont) { k.off = 0; cont = k.cont.map(v => v.slice()); return; }
-      k.off = sepCont(cont, k.cont, IG, AGAP);
+      k.off = sepCont(cont, k.cont, KG, AGAP);
       cont = mergeCont(cont, k.cont, k.off);
     });
     cont[0] = [cont[0][0] - PADF, cont[0][1] + PADF];     // серая рамка
@@ -350,7 +193,7 @@ function measure(p, depth) {
   let kc = null;
   u.blocks.forEach(b => {
     if (!kc) { b.off = 0; kc = b.cont.map(v => v.slice()); return; }
-    b.off = sepCont(kc, b.cont, FG - 2 * PADF, AGAP);
+    b.off = sepCont(kc, b.cont, FG, AGAP);
     kc = mergeCont(kc, b.cont, b.off);
   });
   u.cont = [[0, u.uw]];
@@ -488,8 +331,11 @@ function focusLayout(id) {
 }
 
 /* --- рисование --- */
-const CARD_FONT = 'system-ui, sans-serif';
-const cardMeasure = document.createElement('canvas').getContext('2d');
+const FONT = {S: ['normal', 'normal'], SB: ['bold', 'normal'], SI: ['normal', 'italic'], SBI: ['bold', 'italic']};
+function stripPath(lw) {
+  const x = lw / 2, y = lw / 2, w = CW - lw, r = 7 - lw / 2;
+  return `M${x},13 V${y + r} Q${x},${y} ${x + r},${y} H${x + w - r} Q${x + w},${y} ${x + w},${y + r} V13 Z`;
+}
 // возраст: если известны и рождение, и смерть
 const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; };
 const AGE = {};
@@ -534,7 +380,6 @@ function mmContent() {
 }
 function mmView() {
   const box = document.getElementById('mm'); if (!box || !MM.k) return;
-  if (inOverview()) { box.classList.remove('on'); return; }
   const r = stage.getBoundingClientRect();
   const vx = -st.x / st.s, vy = -st.y / st.s, vw = r.width / st.s, vh = r.height / st.s;
   const show = vw < MM.w * 0.7 || vh < MM.h * 0.7;
@@ -549,55 +394,44 @@ function mmGo(e) {                          // нажатие на миника�
   const cx = MM.x + (ux - MM.ox) / MM.k, cy = MM.y + (uy - MM.oy) / MM.k, r = stage.getBoundingClientRect();
   st.x = r.width / 2 - cx * st.s; st.y = r.height / 2 - cy * st.s; apply();
 }
-function cardText(text, y, preferredSize, className, weight = 400) {
-  if (!text) return '';
-  const inset = 17, available = CW - inset - 9;
-  cardMeasure.font = `${weight} ${preferredSize}px ${CARD_FONT}`;
-  const measured = cardMeasure.measureText(text).width;
-  const size = measured > available ? preferredSize * available / measured : preferredSize;
-  return `<text class="${className}" x="${inset}" y="${y}" font-size="${size.toFixed(2)}" font-weight="${weight}">${esc(text)}</text>`;
+function compactSVG(p) {
+  // издалека: имя крупно, фамилия под ним, годы жизни — мелко
+  const P_ = D.people[p], first = (P_.given || '').split(' ')[0];
+  let sn = (P_.card.ls[0] || [])[2] || ''; sn = sn.split(' (')[0];
+  if (!sn || sn === first || /^\d|^~/.test(sn)) sn = '';
+  const dl = (P_.card.ls.find(([f, z, t]) => /\d{4}/.test(t)) || [])[2] || '';
+  const ys = dl.split(' – ').map(x => { const m = x.match(/(~|ок\. )?.*?(\d{4})/); return m ? (m[1] ? '~' : '') + m[2] : '?'; }).join('–');
+  const f1 = Math.min(20, (CW - 14) / Math.max(1, first.length * 0.62)), f2 = Math.min(13, (CW - 14) / Math.max(1, sn.length * 0.58));
+  let s = '', y = sn ? 44 : 52;
+  s += `<text x="${CW / 2}" y="${y}" font-size="${f1.toFixed(1)}" font-weight="700" text-anchor="middle" fill="#111">${esc(first || sn)}</text>`;
+  if (sn) s += `<text x="${CW / 2}" y="${y + 17}" font-size="${f2.toFixed(1)}" text-anchor="middle" fill="#3b372f">${esc(sn)}</text>`;
+  if (dl) s += `<text x="${CW / 2}" y="${CH - 8}" font-size="10" text-anchor="middle" fill="#6b6459">${esc(ys)}</text>`;
+  return s;
 }
-function baseSVG(id) {
-  const person = D.people[id], c = person.card;
-  const given = person.given || '';
-  const label = /^(?:\(|Имя неизвестно$|Сын |Мать )/.test(given);
-  const [first, ...rest] = given.split(/\s+/);
-  const name = (label ? given : first) || person.name;
-  const patronymic = label ? '' : rest.join(' ');
-  const surname = given && person.name.endsWith(given)
-    ? person.name.slice(0, -given.length).trim() : '';
-  const shortSurname = surname.split(' (')[0];
-  const dates = pDates(id);
-  const years = dates.split(' – ').map(date => {
-    const year = date.match(/\d{4}/)?.[0];
-    return year ? (/^(?:~|ок\.)/.test(date) ? '~' : '') + year : '';
-  }).filter(Boolean).join('–');
-  const fill = person.sex === 'M' ? 'node-man' : person.sex === 'F' ? 'node-woman' : 'node-neutral';
-  const outline = person.status === 'doc' ? ' node-archive' : '';
-  const age = ageOf(id);
-  const overview =
-    cardText(name, 30, 19, 'node-name', 700) +
-    cardText(shortSurname, 49, 13, 'node-family') +
-    cardText(years, 70, 11.5, 'node-fact');
-  const details =
-    cardText(name, 23, 19, 'node-name', 700) +
-    cardText(surname, 37, 12, 'node-family') +
-    cardText(patronymic, 49, 11, 'node-family') +
-    cardText(dates, 65, 10.5, 'node-fact') +
-    cardText(age, 76, 9, 'node-fact');
-  return `<rect class="node-surface ${fill}${outline}" width="${CW}" height="${CH}" rx="8" stroke-width="${c.lw}"${c.dash ? ' stroke-dasharray="3 2"' : ''}/>` +
-    `<rect class="node-clan" x="5" y="9" width="7" height="${CH - 18}" rx="3" fill="${c.strip}"/>` +
-    `<g class="cp">${overview}</g><g class="dt">${details}</g>`;
+function baseSVG(p, relTxt) {              // сама карточка (без подписи родства)
+  const c = D.people[p].card; let s = '';
+  s += `<rect width="${CW}" height="${CH}" rx="7" fill="${c.fill}" stroke="${c.stroke}" stroke-width="${c.lw}"${c.dash ? ' stroke-dasharray="3 2"' : ''}/>`;
+  s += `<path d="${stripPath(c.lw)}" fill="${c.strip}"/>`;
+  s += `<text class="dt" x="${CW / 2}" y="10" font-size="7" font-weight="bold" text-anchor="middle" fill="#fff">${esc(c.stripT)}</text>`;
+  const ls = c.ls.filter(([f]) => f !== 'SI');
+  s += '<g class="dt">';
+  ls.forEach(([f, sz, t], i) => { const [w, st] = FONT[f] || FONT.S;
+    s += `<text x="${CW / 2}" y="${25 + 11 * i}" font-size="${sz}" font-weight="${w}" font-style="${st}" text-anchor="middle" fill="#111">${esc(t)}</text>`; });
+  const ag = ageOf(p);
+  if (ag) s += `<text x="${CW / 2}" y="${25 + 11 * ls.length}" font-size="7.6" text-anchor="middle" fill="#6b6459">${esc(ag)}</text>`;
+  s += '</g><g class="cp">' + compactSVG(p) + '</g>';
+  return s;
 }
 function underSVG(roleTxt) { return ''; }  // подложка теперь рисуется в слое рамок, под линиями
 function roleBox(x, y, roleTxt) {          // подложка «жена/муж»: белая, но под линиями брака
   return `<g transform="translate(${x},${y})">` + roleSVG(roleTxt) + '</g>';
 }
 function roleSVG(roleTxt) {
-  return roleTxt ? `<rect class="tree-spouse-frame" x="-4" y="-13" width="${CW + 8}" height="${CH + 17}" rx="6" fill="#fff" stroke="#9a9a9a" stroke-width="0.8" stroke-dasharray="3 2"/><text class="role-label" x="0" y="-5" font-size="7.5" fill="#888">${esc(roleTxt)}</text>` : '';
+  return roleTxt ? `<rect x="-4" y="-13" width="${CW + 8}" height="${CH + 17}" rx="6" fill="#fff" stroke="#9a9a9a" stroke-width="0.8" stroke-dasharray="3 2"/><text class="role-label" x="0" y="-5" font-size="7.5" fill="#888">${esc(roleTxt)}</text>` : '';
 }
 function overSVG(p, relTxt) {              // подпись родства — поверх
-  return cardText(relTxt, ageOf(p) ? 84 : 78, 8.5, 'node-relation', 650);
+  const n = D.people[p].card.ls.filter(([f]) => f !== 'SI').length + (ageOf(p) ? 1 : 0);
+  return relTxt ? `<text x="${CW / 2}" y="${25 + 11 * n}" font-size="8.3" font-weight="bold" font-style="italic" text-anchor="middle" fill="#7a3d00">${esc(relTxt)}</text>` : '';
 }
 function mkG(cls, html) { const g = document.createElementNS(SVGNS, 'g'); g.setAttribute('class', cls); g.innerHTML = html; return g; }
 function setLayer(card, cls, html) {       // плавная смена слоя: старый гаснет, новый проявляется
@@ -611,10 +445,10 @@ function setLayer(card, cls, html) {       // плавная смена слоя
 }
 function linesSVG(L) {
   let gold = '', col = '';
-  const ln = (x1, y1, x2, y2, c, g, kind = '') => {
+  const ln = (x1, y1, x2, y2, c, g) => {
     const a = `x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"`;
     if (g) gold += `<line ${a} stroke="#f4c430" stroke-width="7" stroke-linecap="round"/>`;
-    col += `<line class="tree-connector${kind ? ' tree-' + kind : ''}" ${a} stroke="${c}" stroke-width="${kind === 'comb' ? 2 : 1.5}" stroke-linecap="round"/>`;
+    col += `<line ${a} stroke="${c}" stroke-width="1.6" stroke-linecap="round"/>`;
   };
   const kinS = id => !!D.people[id].kin || id === 'I1';
   // уровни шин: семьи, чьи линии к детям в одном промежутке перекрываются, — на разной высоте
@@ -641,7 +475,7 @@ function linesSVG(L) {
       if (pr.length === 2 && !o.unmarried) {
         const a = L.pos[pr[0]], b = L.pos[pr[1]];
         const [left, right] = a.x < b.x ? [a, b] : [b, a];
-        if (Math.abs(left.y - right.y) < 1) ln(left.x + CW, left.y + CH / 2 + 8, right.x, right.y + CH / 2 + 8, c, false, 'pair');
+        if (Math.abs(left.y - right.y) < 1) ln(left.x + CW, left.y + CH / 2 + 8, right.x, right.y + CH / 2 + 8, c, false);
       }
       return;
     }
@@ -652,7 +486,7 @@ function linesSVG(L) {
       const parents = pr.map(q => L.pos[q].x + CW / 2);
       const children = ks.map(k => L.pos[k].x + CW / 2);
       pr.forEach((q, i) => ln(parents[i], L.pos[q].y + CH, parents[i], bus, c, false));
-      ln(Math.min(...parents, ...children), bus, Math.max(...parents, ...children), bus, c, false, ks.length > 1 ? 'comb' : '');
+      ln(Math.min(...parents, ...children), bus, Math.max(...parents, ...children), bus, c, false);
       ks.forEach((k, i) => ln(children[i], bus, children[i], L.pos[k].y, c, false));
       return;
     }
@@ -675,18 +509,13 @@ function linesSVG(L) {
       xc = L.pos[q].x + CW / 2; y0 = L.pos[q].y + CH;
     } else if (pr.length === 2) {
       const ym = P0[0].y + CH / 2 + 8;
-      ln(P0[0].x + CW, ym, P0[1].x, ym, c, g && pr.every(kinS), 'pair');
+      ln(P0[0].x + CW, ym, P0[1].x, ym, c, g && pr.every(kinS));
       xc = (P0[0].x + CW + P0[1].x) / 2; y0 = ym;
       if (Math.abs(P0[0].y - P0[1].y) > 1) { xc = P0[0].x + CW / 2; y0 = P0[0].y + CH; }
     } else { xc = P0[0].x + CW / 2; y0 = P0[0].y + CH; }
     ln(xc, y0, xc, bus, c, g);
     const xs = ks.map(k => L.pos[k].x + CW / 2);
-    if (ks.length > 1) {
-      const left = Math.min(...xs), right = Math.max(...xs);
-      if (xc < left) ln(xc, bus, left, bus, c, false);
-      if (xc > right) ln(right, bus, xc, bus, c, false);
-      ln(left, bus, right, bus, c, false, 'comb');
-    } else ln(xc, bus, xs[0], bus, c, false);
+    ln(Math.min(xc, ...xs), bus, Math.max(xc, ...xs), bus, c, false);
     ks.forEach(k => {
       const kx = L.pos[k].x + CW / 2;
       if (g && kinS(k)) ln(Math.min(xc, kx), bus, Math.max(xc, kx), bus, c, true);
@@ -701,13 +530,14 @@ function framesSVG(L) {
   return L.frames.map(fr => {
     const ps = fr.members.filter(q => L.pos[q]);
     if (!ps.length) return '';
-    const x1 = Math.min(...ps.map(q => L.pos[q].x)) - PADF;
-    const x2 = Math.max(...ps.map(q => L.pos[q].x)) + CW + PADF;
+    const x1 = Math.min(...ps.map(q => L.pos[q].x)) - PADF - (ps.some(q => L.roles[q]) ? 4 : 0);
+    const x2 = Math.max(...ps.map(q => L.pos[q].x)) + CW + PADF + (ps.some(q => L.roles[q]) ? 4 : 0);
     const y = Math.min(...ps.map(q => L.pos[q].y)) - 26;
-    const hh = Math.max(...ps.map(q => L.pos[q].y)) + CH + PADF - y;
-    const lab = frameLabel(fr.f);
-    return `<rect x="${x1.toFixed(1)}" y="${y.toFixed(1)}" width="${(x2 - x1).toFixed(1)}" height="${hh.toFixed(1)}" class="tree-family-frame" data-family="${fr.f}" rx="9" stroke-width="0.8"/>` +
-      `<text x="${(x1 + 7).toFixed(1)}" y="${(y + 11).toFixed(1)}" font-size="8" class="tree-family-caption">${esc(lab)}</text>`;
+    const hh = Math.max(...ps.map(q => L.pos[q].y)) + CH + 12 - y;
+    const o = D.fams[fr.f];
+    const lab = o.h && o.w ? `дети: ${first(o.h)} и ${first(o.w)}` : (o.h || o.w ? `дети: ${first(o.h || o.w)}` : 'братья (родители неизвестны)');
+    return `<rect x="${x1.toFixed(1)}" y="${y.toFixed(1)}" width="${(x2 - x1).toFixed(1)}" height="${hh.toFixed(1)}" rx="9" fill="#f5f5f3" stroke="#c4c4c4" stroke-width="0.8"/>` +
+      `<text x="${(x1 + 7).toFixed(1)}" y="${(y + 11).toFixed(1)}" font-size="8" fill="#7a7a7a">${esc(lab)}</text>`;
   }).join('');
 }
 
@@ -727,7 +557,6 @@ function focusOn(id) {
   if (backG) backG.remove();
   backG = document.createElementNS(SVGNS, 'g'); backG.setAttribute('class', 'focusBack');
   backG.innerHTML = framesSVG(L) + Object.entries(L.roles).map(([q, t]) => L.pos[q] ? roleBox(L.pos[q].x, L.pos[q].y, t) : '').join('') + linesSVG(L);
-  placeFamilyCaptions(backG);
   backG.style.opacity = '0';
   focL.appendChild(backG);
   if (!cardsG) { cardsG = document.createElementNS(SVGNS, 'g'); focL.appendChild(cardsG); }
@@ -756,7 +585,7 @@ function focusOn(id) {
     ids.forEach(p => { const g = cardsG.querySelector(`.person[data-p="${p}"]`); if (!g) return; setT(g, L.pos[p].x, L.pos[p].y); g.style.opacity = '1'; });
     timer = setTimeout(() => { if (backG) backG.style.opacity = '1'; }, T * 0.6);
   });
-  curPos = L.pos; focusId = id; rebuildOverview(); mmContent();
+  curPos = L.pos; focusId = id; mmContent();
   // приближение: читаемый масштаб (текст карточек виден), в кадре — человек, его родители, супруги и дети
   const pp = D.people[id];
   const core = [id, ...(pp.par || []), ...(pp.sp || []), ...otherParentsOf(id), ...(pp.kids || [])].filter(p => L.pos[p]);
@@ -789,7 +618,7 @@ function focusOff() {
   }
   fullL.querySelectorAll('.person').forEach(g => { if (!back.has(g.dataset.p)) g.style.opacity = '1'; });
   fullL.style.opacity = '1'; fullL.style.pointerEvents = ''; if (chipsG) chipsG.style.display = '';
-  focusId = null; curPos = {}; rebuildOverview(); mmContent();
+  focusId = null; curPos = {}; mmContent();
 }
 function animView(fn) {
   svg.classList.add('anim'); fn();
@@ -818,45 +647,15 @@ function posIn(v, p) {
   return {x: v.W / 2, y: 0};
 }
 const posInView = p => posIn(VIEW, p);
-function familyTitle(f) {
-  const {h, w, ks} = D.fams[f];
-  const parents = [h, w].filter(Boolean);
-  if (parents.length) return parents.map(first).join(' и ');
-  const clans = new Set(ks.map(id => D.people[id].clan));
-  return clans.size === 1 && [...clans][0] || 'Семья';
-}
 function frameLabel(f) {
-  const {h, w} = D.fams[f];
-  return (h || w ? 'дети: ' : '') + familyTitle(f);
-}
-function placeFamilyCaptions(layer) {
-  const segments = [...layer.querySelectorAll('line')].map(line =>
-    ['x1', 'x2', 'y1', 'y2'].map(key => Number(line.getAttribute(key))));
-  cardMeasure.font = `8px ${CARD_FONT}`;
-  for (const caption of layer.querySelectorAll('.tree-family-caption')) {
-    const frame = caption.previousElementSibling;
-    const left = Number(caption.getAttribute('x'));
-    const right = Number(frame.getAttribute('x')) + Number(frame.getAttribute('width'));
-    const y = Number(caption.getAttribute('y'));
-    const width = cardMeasure.measureText(caption.textContent).width;
-    const obstacles = segments.filter(([x1, x2, y1, y2]) =>
-      x1 === x2 && Math.min(y1, y2) < y + 2 && Math.max(y1, y2) > y - 8)
-      .map(([x]) => x).sort((a, b) => a - b);
-    let x = left;
-    for (const obstacle of obstacles) {
-      if (obstacle + 4 <= x) continue;
-      if (obstacle - 4 >= x + width) break;
-      x = obstacle + 4;
-    }
-    if (x + width <= right - 4) caption.setAttribute('x', x);
-    layer.appendChild(caption);
-  }
+  const o = D.fams[f]; if (!o) return '';
+  return o.h && o.w ? `дети: ${first(o.h)} и ${first(o.w)}` : (o.h || o.w ? `дети: ${first(o.h || o.w)}` : 'братья (родители неизвестны)');
 }
 function backHTML(v) {
   let s = '';
   v.frames.forEach(([f, x, y, w, h]) => {
-    s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" class="tree-family-frame" data-family="${f}" rx="9" stroke-width="0.8"/>` +
-      `<text x="${x + 7}" y="${y + 11}" font-size="8" class="tree-family-caption">${esc(frameLabel(f))}</text>`;
+    s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="#f5f5f3" stroke="#c4c4c4" stroke-width="0.8"/>` +
+      `<text x="${x + 7}" y="${y + 11}" font-size="8" fill="#7a7a7a">${esc(frameLabel(f))}</text>`;
   });
   Object.entries(v.roles).forEach(([q, t]) => { if (t && v.cards[q]) s += roleBox(v.cards[q][0], v.cards[q][1], t); });
   if (v.connections) return s + linesSVG(v.connections);
@@ -865,185 +664,6 @@ function backHTML(v) {
   v.dots.forEach(([x, y, c]) => { s += `<circle cx="${x}" cy="${y}" r="2.4" fill="${pal[c]}"/>`; });
   return s;
 }
-let overviewLayout = null, macroOffset = null, overviewDirty = true, overviewFrame = 0;
-let macroFitted = false, macroZoomFrame = 0;
-const macroPlane = document.createElement('div');
-macroPlane.className = 'macro-plane';
-overviewLayer.appendChild(macroPlane);
-
-function rebuildOverview() {
-  overviewDirty = true;
-  queueOverview();
-}
-
-function drawOverview() {
-  if (!VIEW) return;
-  const positions = focusId ? curPos : VIEW.connections.pos;
-  const matches = id => !CLAN || D.people[id].card.stripT === CLAN;
-  overviewLayout = window.NovikovyMacroLayout(D, positions, matches, familyTitle, CW, CH);
-  const {nodes, links, width, height} = overviewLayout;
-  const connectors = document.createElementNS(SVGNS, 'svg');
-  connectors.classList.add('macro-links');
-  connectors.setAttribute('aria-hidden', 'true');
-  connectors.setAttribute('width', width);
-  connectors.setAttribute('height', height);
-  for (const {source, path: route} of links) {
-    const path = document.createElementNS(SVGNS, 'path');
-    path.setAttribute('d', route);
-    path.setAttribute('stroke', D.fams[source.family].col);
-    connectors.appendChild(path);
-  }
-  const buttons = nodes.map(node => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'overview-label ' + (node.family ? 'macro-family' : 'macro-single');
-    button.style.cssText = 'left:' + node.x + 'px;top:' + node.y + 'px;width:' + node.width + 'px;height:' + node.height + 'px';
-    const label = document.createElement('span');
-    label.className = 'macro-title';
-    label.textContent = node.label;
-    button.appendChild(label);
-    button.title = node.label;
-    let accessibleLabel = 'Приблизить ' + node.label;
-    if (node.family) {
-      button.dataset.family = node.family;
-      button.style.setProperty('--macro-clan', D.fams[node.family].col);
-      const row = document.createElement('span');
-      row.className = 'macro-children';
-      row.setAttribute('aria-hidden', 'true');
-      for (const id of node.children) {
-        const child = D.people[id];
-        const pill = document.createElement('i');
-        pill.className = 'macro-child ' + (child.sex === 'M' ? 'boy' : child.sex === 'F' ? 'girl' : '');
-        row.appendChild(pill);
-      }
-      button.appendChild(row);
-      button.title += '\n' + node.children.map(id => D.people[id].given || pName(id)).join(', ');
-      accessibleLabel += ', детей ' + node.children.length;
-    } else {
-      button.dataset.person = node.person;
-      button.style.setProperty('--macro-clan', D.people[node.person].card.strip);
-    }
-    button.setAttribute('aria-label', accessibleLabel);
-    button.onclick = event => { if (!event.detail || moved < 6) zoomToMacro(node); };
-    button.addEventListener('focus', () => {
-      if (!button.matches(':focus-visible') || !macroOffset || macroFitted) return;
-      const {clientWidth, clientHeight} = stage;
-      const s = overviewScale();
-      macroOffset.x += Math.max(0, 12 - (node.x * s + macroOffset.x)) -
-        Math.max(0, (node.x + node.width) * s + macroOffset.x - clientWidth + 12);
-      macroOffset.y += Math.max(0, 12 - (node.y * s + macroOffset.y)) -
-        Math.max(0, (node.y + node.height) * s + macroOffset.y - clientHeight + 60);
-      queueOverview();
-    });
-    return button;
-  });
-  macroPlane.replaceChildren(connectors, ...buttons);
-  overviewDirty = false;
-}
-
-function ensureOverview() {
-  if (overviewDirty) drawOverview();
-}
-
-function macroFit() {
-  const {clientWidth: width, clientHeight: height} = stage;
-  const usableW = Math.max(1, width - 24);
-  const usableH = Math.max(1, height - 72);
-  const scale = Math.min(BLEND_END / OVERVIEW_SCALE, usableW / Math.max(1, overviewLayout.width),
-    usableH / Math.max(1, overviewLayout.height));
-  return {scale, x: (width - overviewLayout.width * scale) / 2,
-    y: 12 + (usableH - overviewLayout.height * scale) / 2};
-}
-
-function macroPoint(node) {
-  const scale = overviewScale();
-  return {
-    x: (macroOffset?.x ?? 0) + (node.x + node.width / 2) * scale,
-    y: (macroOffset?.y ?? 0) + (node.y + node.height / 2) * scale
-  };
-}
-
-function alignMacro(node, x, y) {
-  const scale = overviewScale();
-  macroOffset = {x: x - (node.x + node.width / 2) * scale, y: y - (node.y + node.height / 2) * scale};
-}
-
-function stopMacroZoom() {
-  cancelAnimationFrame(macroZoomFrame);
-  macroZoomFrame = 0;
-}
-
-function zoomToMacro(node) {
-  stopMacroZoom();
-  svg.classList.remove('anim', 'moving');
-  const {width, height} = stage.getBoundingClientRect();
-  const targetScale = Math.max(0.68, Math.min(0.83, (width - 28) / node.target.width));
-  const startScale = st.s;
-  const start = macroPoint(node);
-  const begin = performance.now();
-  const duration = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 420;
-  macroFitted = false;
-  const draw = now => {
-    const time = duration ? Math.min(1, (now - begin) / duration) : 1;
-    const progress = time * time * (3 - 2 * time);
-    st.s = startScale * (targetScale / startScale) ** progress;
-    const x = start.x + (width / 2 - start.x) * progress;
-    const y = start.y + (height * 0.48 - start.y) * progress;
-    alignMacro(node, x, y);
-    st.x = x - st.s * node.target.x;
-    st.y = y - st.s * node.target.y;
-    apply();
-    macroZoomFrame = time < 1 ? requestAnimationFrame(draw) : 0;
-  };
-  draw(begin);
-}
-
-function nearestMacro(x, y, detailed = false) {
-  let closest, distance = Infinity;
-  for (const node of overviewLayout?.nodes ?? []) {
-    const point = detailed ? {x: st.x + node.target.x * st.s, y: st.y + node.target.y * st.s} : macroPoint(node);
-    const d = Math.hypot(x - point.x, y - point.y);
-    if (d < distance) { closest = node; distance = d; }
-  }
-  return closest;
-}
-
-function paintMacro() {
-  ensureOverview();
-  if (!overviewLayout) return;
-  const {clientWidth, clientHeight} = stage;
-  const scale = overviewScale();
-  const w = overviewLayout.width * scale, h = overviewLayout.height * scale;
-  if (macroFitted) {
-    const {x, y} = macroFit();
-    macroOffset = {x, y};
-  } else if (!macroOffset) {
-    macroOffset = {x: (clientWidth - w) / 2, y: 12};
-  }
-  if (!macroFitted && st.s <= BLEND_END && !macroZoomFrame) {
-    const clamp = (value, size, viewport, endPad) => {
-      const a = viewport - size - endPad;
-      return Math.max(Math.min(a, 12), Math.min(Math.max(a, 12), value));
-    };
-    macroOffset.x = clamp(macroOffset.x, w, clientWidth, 12);
-    macroOffset.y = clamp(macroOffset.y, h, clientHeight, 60);
-  }
-  macroPlane.classList.toggle('macro-map', scale < 0.33);
-  macroPlane.style.transform = 'translate(' + macroOffset.x + 'px,' + macroOffset.y + 'px) scale(' + scale + ')';
-}
-
-function queueOverview() {
-  if (st.s >= BLEND_START || overviewFrame) return;
-  overviewFrame = requestAnimationFrame(() => {
-    overviewFrame = 0;
-    if (st.s >= BLEND_START) return;
-    if (macroFitted) fitAll();
-    else paintMacro();
-  });
-}
-
-new ResizeObserver(queueOverview).observe(stage);
-
 // язычок под карточкой (или справа от неё): цвет рода, большая зона нажатия
 function tabSVG(attr, x, y, w, h, label, sub, col, open, side) {
   const r = 9, fs = Math.min(9, (w - 14) / (label.length * 0.6));
@@ -1058,39 +678,28 @@ function tabSVG(attr, x, y, w, h, label, sub, col, open, side) {
 const ppl = n => (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? 'человека' : 'человек';
 const BRCOL = '#8a7560';
 function grpCol(mem) { const p = mem.find(q => D.people[q]); return p ? D.people[p].card.strip : '#666'; }
-function branchControls(v) {
-  const controls = [];
-  const countNew = w => Object.keys(w.cards).filter(p => !v.cards[p]).length;
-  VIEWS.groups.forEach(([, spouse, title, members], index) => {
-    const anchor = spouse || 'I35';
-    if (!v.cards[anchor] || !members.some(p => D.people[p])) return;
-    const open = MASK >> index & 1;
-    controls.push({group: true, side: !spouse, anchor, title, index, open, color: grpCol(members),
-      count: open ? 0 : countNew(viewOf(MASK | 1 << index, BMASK))});
-  });
-  VIEWS.branches.forEach(([anchor, title], index) => {
-    if (!v.cards[anchor]) return;
-    const open = BMASK >> index & 1;
-    controls.push({group: false, side: false, anchor, title, index, open, color: BRCOL,
-      count: open ? 0 : countNew(viewOf(MASK, BMASK | 1 << index))});
-  });
-  return controls;
-}
 function chipsHTML(v) {
   let s = '';
+  const nv = Object.keys(v.cards).length, gain = w => Object.keys(w.cards).length - nv;
   const under = (a, attr, label, sub, col, open) => {
     const [cx, cy] = v.cards[a], w = CW - 6, h = sub ? 30 : 20;
     s += tabSVG(attr, cx + 3, cy + CH, w, h, label, sub, col, open, false);
   };
-  for (const {group, side, anchor, title, index, open, count, color} of branchControls(v)) {
-    const attr = `data-${group ? 'g' : 'b'}="${index}"`;
-    const label = open ? group ? '− свернуть' : '− свернуть потомков' : `＋ ${title}`;
-    const sub = open ? '' : `${count} ${ppl(count)}`;
-    if (side) {
-      const [cx, cy] = v.cards[anchor];
-      s += tabSVG(attr, cx + CW + 16, cy + CH / 2 - 17, 120, 34, label, sub, color, open, true);
-    } else under(anchor, attr, label, sub, color, open);
-  }
+  VIEWS.groups.forEach(([k, sp, title, mem], i) => {
+    const a = sp || 'I35'; if (!v.cards[a] || !mem.some(p => D.people[p])) return;
+    const open = MASK >> i & 1, col = grpCol(mem);
+    const w = viewOf(MASK | 1 << i, BMASK), n = open ? 0 : Object.keys(w.cards).filter(p => !v.cards[p]).length;
+    const t = open ? '− свернуть' : `＋ ${title}`, sub = open ? '' : `${n} ${ppl(n)}`;
+    if (sp) under(a, `data-g="${i}"`, t, sub, col, open);
+    else { const [cx, cy] = v.cards[a]; s += tabSVG(`data-g="${i}"`, cx + CW + 16, cy + CH / 2 - 17, 120, 34, t, sub, col, open, true); }
+  });
+  VIEWS.branches.forEach(([r, title, mem], j) => {
+    if (!v.cards[r]) return;
+    const open = BMASK >> j & 1;
+    const w = viewOf(MASK, BMASK | 1 << j);
+    const n = open ? 0 : Object.keys(w.cards).filter(p => !v.cards[p]).length;
+    under(r, `data-b="${j}"`, open ? '− свернуть потомков' : `＋ ${title}`, open ? '' : `${n} ${ppl(n)}`, BRCOL, open);
+  });
   return s;
 }
 function renderView(mask, bmask, anchorId) {
@@ -1099,7 +708,6 @@ function renderView(mask, bmask, anchorId) {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('width', W); svg.setAttribute('height', H);
   if (viewBackG) { const b = viewBackG; b.style.opacity = '0'; setTimeout(() => b.remove(), 400); }
   viewBackG = mkG('viewBack fx', backHTML(VIEW)); viewBackG.style.opacity = old ? '0' : '1';
-  placeFamilyCaptions(viewBackG);
   fullL.insertBefore(viewBackG, viewCardsG);
   const keep = new Set(Object.keys(VIEW.cards));
   viewCardsG.querySelectorAll('.person').forEach(g => {
@@ -1118,7 +726,7 @@ function renderView(mask, bmask, anchorId) {
     setLayer(g, 'under', underSVG(VIEW.roles[p] || ''));
   });
   chipsG.innerHTML = chipsHTML(VIEW);
-  updAllBtn(); rebuildOverview(); mmContent();
+  updAllBtn(); mmContent();
   if (!old) return;
   void viewCardsG.getBoundingClientRect();
   requestAnimationFrame(() => {
@@ -1138,12 +746,7 @@ function toggleGroup(i) {
 function toggleBranch(j) {
   renderView(MASK, BMASK ^ (1 << j), VIEWS.branches[j][0]);
 }
-function updAllBtn() {
-  const all = allBranchesOpen();
-  allButton.textContent = all ? 'Свернуть всё' : 'Раскрыть всё';
-  expandBranches.disabled = all;
-  collapseBranches.disabled = !MASK && !BMASK;
-}
+function updAllBtn() { const b = document.getElementById('allg'); if (b) b.textContent = MASK === ALLG() && BMASK === ALLB() ? 'Свернуть всё' : 'Раскрыть всё'; }
 
 /* --- легенда родов: численность и фокус на роду --- */
 let CLAN = null;
@@ -1152,26 +755,10 @@ function buildLegend() {
   Object.entries(D.people).forEach(([id, p]) => { const t = p.card.stripT; if (!t) return;
     const o = cnt.get(t) || {n: 0, col: p.card.strip, ids: []}; o.n++; o.ids.push(id); cnt.set(t, o); });
   const nav = document.getElementById('legend');
-  const sorted = [...cnt.entries()].sort((a, b) => b[1].n - a[1].n);
-  nav.innerHTML = sorted.map(([t, o]) =>
-    `<button data-clan="${esc(t)}" aria-pressed="false" title="Показать род на схеме"><i style="background:${o.col}"></i>${esc(t)} <b>${o.n}</b></button>`
-  ).join('');
-  const choose = e => {
-    const button = e.target.closest('[data-clan]');
-    if (!button) return;
-    if (clanDialog.open) clanDialog.close();
-    const t = button.dataset.clan;
-    if (CLAN === t) clanOff();
-    else clanOn(t, cnt.get(t).ids);
-  };
-  nav.onclick = clanList.onclick = choose;
-  document.getElementById('clanToggle').onclick = () => {
-    zoomMenu.open = false;
-    clanList.innerHTML = sorted.map(([title, {n, col}]) =>
-      `<button type="button" data-clan="${esc(title)}" aria-pressed="${CLAN === title}"><i style="--branch-color:${col}" aria-hidden="true"></i><span>${esc(title)}<small>${n} ${ppl(n)}</small></span><b aria-hidden="true">${CLAN === title ? '✓' : '›'}</b></button>`
-    ).join('');
-    clanDialog.showModal();
-  };
+  nav.innerHTML = [...cnt.entries()].sort((a, b) => b[1].n - a[1].n)
+    .map(([t, o]) => `<button data-clan="${esc(t)}" title="Показать род на схеме"><i style="background:${o.col}"></i>${esc(t)} <b>${o.n}</b></button>`).join('');
+  nav.onclick = e => { const b = e.target.closest('[data-clan]'); if (!b) return;
+    const t = b.dataset.clan; if (CLAN === t) { clanOff(); return; } clanOn(t, cnt.get(t).ids); };
 }
 function clanOn(t, ids) {
   clearSel(); clanOff();
@@ -1191,14 +778,10 @@ function clanOn(t, ids) {
     });
   }
   if (m !== MASK || b !== BMASK) renderView(m, b);
-  CLAN = t; rebuildOverview(); const on = new Set(ids);
+  CLAN = t; const on = new Set(ids);
   svg.classList.add('clan');
   viewCardsG.querySelectorAll('.person').forEach(g => g.classList.toggle('on', on.has(g.dataset.p)));
-  document.querySelectorAll('#legend button').forEach(x => {
-    const active = x.dataset.clan === t;
-    x.classList.toggle('on', active);
-    x.setAttribute('aria-pressed', active);
-  });
+  document.querySelectorAll('#legend button').forEach(x => x.classList.toggle('on', x.dataset.clan === t));
   const vis = ids.filter(p => VIEW.cards[p]);
   if (!vis.length) return;
   const xs = vis.map(p => VIEW.cards[p][0]), ys = vis.map(p => VIEW.cards[p][1]);
@@ -1206,28 +789,14 @@ function clanOn(t, ids) {
   setTimeout(() => animView(() => fitBox(x1, y1, x2 - x1, y2 - y1, 20)), 30);
 }
 function clanOff() {
-  if (!CLAN) return; CLAN = null; rebuildOverview();
+  if (!CLAN) return; CLAN = null;
   svg.classList.remove('clan');
   viewCardsG.querySelectorAll('.person.on').forEach(g => g.classList.remove('on'));
-  document.querySelectorAll('#legend button.on').forEach(x => {
-    x.classList.remove('on');
-    x.setAttribute('aria-pressed', false);
-  });
+  document.querySelectorAll('#legend button.on').forEach(x => x.classList.remove('on'));
 }
 
 /* --- история изменений --- */
 const CHANGES = [
-  ['2.10.30', 'Ноябрь 2026', ['Средний и дальний виды плавно сменяют друг друга. Команда «Вписать схему» показывает всё раскрытое древо на телефоне и компьютере.']],
-  ['2.10.29', 'Ноябрь 2026', ['На дальнем масштабе семьи показаны компактными плашками с индикаторами детей. Подписи групп разведены с линиями, а связь между супругами стала заметнее на среднем масштабе.']],
-  ['2.10.28', 'Ноябрь 2026', ['Увеличена метка рода, осветлены карточки и улучшена группировка детей одной семьи.']],
-  ['2.10.27', 'Ноябрь 2026', ['Цветная метка рода возвращена на левый край карточки. Упрощено расположение подписей.']],
-  ['2.10.26', 'Ноябрь 2026', ['Добавлен дальний масштаб с читаемыми названиями семей. На карточках выделена строка дат и обновлена метка рода.']],
-  ['2.10.25', 'Ноябрь 2026', ['Усилены голубая и сливочная заливки карточек, границы и метки рода. Фон семейных групп стал спокойнее.']],
-  ['2.10.24', 'Ноябрь 2026', ['На телефоне и компьютере карточки на схеме оформлены в сливочных и голубых тонах с крупными именами и цветной меткой рода.']],
-  ['2.10.23', 'Ноябрь 2026', ['Сокращён заголовок сайта. Развёрнутые ветви выделены в списке, который остаётся открытым при выборе нескольких ветвей.']],
-  ['2.10.22', 'Ноябрь 2026', ['На телефоне команды для всех ветвей перенесены в список «Ветви», а инструкция открывается кнопкой «?».']],
-  ['2.10.21', 'Ноябрь 2026', ['В мобильной версии выбор рода вынесен в отдельную кнопку «Роды» внизу схемы.']],
-  ['2.10.20', 'Ноябрь 2026', ['На телефоне добавлены кнопки масштаба, список ветвей с крупными кнопками и полноэкранный режим карточки.']],
   ['2.10.19', 'Ноябрь 2026', ['Васса Новикова перенесена в семью Ивана Гавриловича и Евдокии Тимофеевны. Уточнено отчество.']],
   ['2.10.18', 'Ноябрь 2026', ['Во всей истории версий указан месяц выпуска: ноябрь 2026 года.']],
   ['2.10.17', 'Ноябрь 2026', ['Уточнены семейные связи Бычиных. В ветку Логиновых добавлен Егор, сын Александра и Светланы.']],
@@ -1291,7 +860,9 @@ const CHANGES = [
   ['1.1.0', 'Ноябрь 2026', ['Сканы архивных документов с расшифровками, крёстные, фотографии.']],
   ['1.0.0', 'Ноябрь 2026', ['Интерактивная схема: поиск, подсветка предков и потомков, карточка человека.']],
 ];
-const hdr = document.querySelector('header');
+const hdr = document.querySelector('header'), menuB = document.getElementById('menuB');
+menuB.onclick = () => { const o = hdr.classList.toggle('menu'); menuB.setAttribute('aria-expanded', o); };
+document.getElementById('legend').addEventListener('click', () => setTimeout(() => { hdr.classList.remove('menu'); menuB.setAttribute('aria-expanded', false); }, 0));
 document.getElementById('ver').onclick = () => {
   lb.querySelector('.box').innerHTML = `<button class="close" aria-label="Закрыть">×</button><div class="cl"><h2>История изменений</h2>
     <p class="meta">Версии — major.minor.patch: большое обновление · новая возможность · исправление.</p>` +
@@ -1305,7 +876,6 @@ function select(id) {
   focusOn(id);
 }
 function clearSel() {
-  setReading(false);
   clanOff();
   panel.classList.remove('open');
   focusOff();
@@ -1350,7 +920,7 @@ function showPanel(id) {
   const ev = p.events.filter(e => e.d || e.n || e.pl).map(e => `<div class="ev"><b>${esc(e.t)}${e.d ? ': ' + esc(e.d) : ''}</b>${e.pl ? '<br>' + esc(e.pl) : ''}${e.n ? '<br>' + linkify(e.n) : ''}${e.s ? `<div class="s">${esc(e.s)}${e.pg ? ' · ' + esc(e.pg) : ''}</div>` : ''}</div>`).join('');
   const mar = p.marr.map(m => `<div class="ev"><b>брак${m.d ? ': ' + esc(m.d) : ''}</b> — с ${esc(pName(m.with))}${m.n ? '<br>' + esc(m.n) : ''}${m.s ? `<div class="s">${esc(m.s)}</div>` : ''}</div>`).join('');
   const short = p.lines.filter(t => !/\d{4}|^~|^\?/.test(t) && t !== p.kin && t !== '2-я жена Николая').join(' ');
-  panel.innerHTML = `<div class="grab"><button class="tg" aria-label="Свернуть или развернуть карточку"><span>${esc(short)}</span><em class="hd"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><b class="h1t">скрыть</b><b class="h2t">показать</b></em></button><button class="panel-mode" type="button"><span class="reading-enter">На весь экран</span><span class="reading-exit">‹ К схеме</span></button><button class="x close" aria-label="Закрыть">×</button></div><button class="close" aria-label="Закрыть">×</button>
+  panel.innerHTML = `<div class="grab"><button class="tg" aria-label="Свернуть или развернуть карточку"><span>${esc(short)}</span><em class="hd"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 5l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><b class="h1t">скрыть</b><b class="h2t">показать</b></em></button><button class="x close" aria-label="Закрыть">×</button></div><button class="close" aria-label="Закрыть">×</button>
     ${plateHtml(id)}
     ${p.est ? `<p class="meta">Год рождения ~${p.est} — примерная оценка по родным.</p>` : ''}
     ${(p.docs || []).length ? sec('docs', 'Архивные документы', p.docs.length, `<div class="docs">${p.docs.map(d => { const o = D.docs[d]; return `<button class="doc" data-doc="${d}"><img src="${o.img}" alt="" loading="lazy"><span>${esc(o.title)}<small>кадр ${esc(o.frame)} · нажмите, чтобы открыть скан</small></span></button>`; }).join('')}</div>`) : ''}
@@ -1378,26 +948,6 @@ function plateHtml(id) {
     <h2>${esc(ln[0] || '')}${ln.length > 1 ? `<span>${esc(ln.slice(1).join(' '))}</span>` : ''}</h2>
     <div class="pd">${esc(pDates(id)) || 'даты неизвестны'}${ag ? ' · ' + esc(ag) : ''}</div>${st_ ? `<div class="ps">${st_}</div>` : ''}</div>`;
 }
-function setReading(open, moveFocus = false) {
-  if (panel.classList.contains('reading') === open) return;
-  const main = panel.parentElement;
-  if (open) main.style.setProperty('--reading-space', `${panel.getBoundingClientRect().height}px`);
-  else main.style.removeProperty('--reading-space');
-  panel.classList.toggle('reading', open);
-  main.classList.toggle('reading', open);
-  for (const element of [stage, hdr, document.querySelector('footer')]) element.inert = open;
-  if (open) {
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-modal', 'true');
-    panel.setAttribute('aria-label', 'Карточка человека');
-  } else {
-    panel.removeAttribute('role');
-    panel.removeAttribute('aria-modal');
-    panel.removeAttribute('aria-label');
-  }
-  mmView();
-  if (moveFocus) panel.querySelector('.panel-mode')?.focus({preventScroll: true});
-}
 let PMIN = false;                         // на телефоне карточка человека может быть свёрнута в полоску
 function recenter() {                     // после изменения размеров сцены выбранный человек остаётся в кадре
   if (!focusId || !curPos[focusId]) return;
@@ -1405,10 +955,6 @@ function recenter() {                     // после изменения ра�
   animView(() => { st.x = r.width / 2 - (c.x + CW / 2) * st.s; st.y = r.height * 0.42 - (c.y + CH / 2) * st.s; apply(); });
 }
 panel.addEventListener('click', e => {
-  if (e.target.closest('.panel-mode')) {
-    setReading(!panel.classList.contains('reading'), true);
-    return;
-  }
   if (e.target.closest('.tg')) { PMIN = !PMIN; panel.classList.toggle('min', PMIN); if (!PMIN) panel.scrollTop = 0; setTimeout(recenter, 280); return; }
   if (e.target.closest('.close')) return clearSel();
   const im = e.target.closest('[data-img]'); if (im) { lb.querySelector('.box').innerHTML = `<button class="close" aria-label="Закрыть">×</button><img src="${im.dataset.img}" alt="">`; lb.classList.add('open', 'img'); return; }
@@ -1445,7 +991,6 @@ function start() {
     buildAnch(); buildLegend();
     { const n = Object.keys(D.people).length, w = n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'человека' : 'человек'; document.getElementById('total').textContent = `${n} ${w} на схеме · `; }
     renderView(0, 0);
-    stageActions.hidden = false;
     fitAll();
     if (matchMedia('(max-width:760px)').matches && VIEW.cards.I5 && VIEW.cards.I7) {
       // по центру — Николай с жёнами; по высоте — так, чтобы сверху были видны его родители и деды, снизу — дети

@@ -3,64 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Родословная Новиковых из д.Чикаши</title>
-<link rel="stylesheet" href="css/styles.css?v=2.10.30">
+<title>Родословная Новиковых из деревни Чикаши</title>
+<link rel="stylesheet" href="css/styles.css?v=2.10.19">
 </head>
 <body>
 <header>
-  <h1>Родословная Новиковых из д.Чикаши<small><span id="total"></span>и породнившиеся с ними семьи · нажмите на человека — схема перестроится вокруг него</small></h1>
+  <h1>Родословная Новиковых из деревни Чикаши<small><span id="total"></span>и породнившиеся с ними семьи · нажмите на человека — схема перестроится вокруг него</small></h1>
+  <button id="menuB" aria-label="Меню" aria-expanded="false">☰</button>
   <div class="search"><input id="q" type="search" placeholder="Имя, фамилия или девичья фамилия…" autocomplete="off" aria-label="Поиск по имени"><div id="results" role="listbox"></div></div>
   <div class="tools">
-    <button id="help" type="button" aria-label="Инструкция"><span class="help-text">Инструкция</span><span class="help-icon" aria-hidden="true">?</span></button>
+    <button id="help">Инструкция</button>
     <button id="allg">Раскрыть всё</button>
   </div>
   <nav id="legend" aria-label="Рода"></nav>
 </header>
 <main>
   <div id="stage"><div id="loading">Загружаю древо…</div><div id="mm" aria-hidden="true"><svg id="mmS" xmlns="http://www.w3.org/2000/svg"><g id="mmC"></g><rect id="mmV" fill="#c8553d22" stroke="#c8553d" stroke-width="1"/></svg></div><div id="hint">Тяните, чтобы двигать · двойной тап, колесо или два пальца — масштаб</div></div>
-  <div id="overviewLabels" class="overview-labels" role="group" aria-label="Семьи на общем плане" hidden></div>
-  <div class="stage-actions" id="stageActions" hidden>
-    <button id="clanToggle" type="button" aria-haspopup="dialog">Роды</button>
-    <button id="branchToggle" type="button" aria-haspopup="dialog">Ветви</button>
-    <details id="zoomMenu">
-      <summary>Масштаб</summary>
-      <div class="zoom-options" role="group" aria-label="Управление масштабом">
-        <button type="button" data-zoom="in" aria-label="Приблизить">+</button>
-        <button type="button" data-zoom="out" aria-label="Отдалить">−</button>
-        <button type="button" data-zoom="fit">Вписать схему</button>
-      </div>
-    </details>
-  </div>
   <aside id="panel" aria-live="polite"></aside>
 </main>
-<footer>Разработка — Павел Железняк<button id="ver" title="История изменений">v2.10.30</button></footer>
-<dialog class="stage-dialog" id="branchDialog" aria-labelledby="branchTitle">
-  <div class="stage-dialog-heading">
-    <h2 id="branchTitle">Ветви на схеме</h2>
-    <form method="dialog"><button type="submit" aria-label="Закрыть ветви">×</button></form>
-  </div>
-  <div class="branch-actions" role="group" aria-label="Все ветви">
-    <button type="button" id="expandBranches">Раскрыть всё</button>
-    <button type="button" id="collapseBranches">Свернуть всё</button>
-  </div>
-  <div class="stage-list" id="branchList"></div>
-</dialog>
-<dialog class="stage-dialog" id="clanDialog" aria-labelledby="clanTitle">
-  <div class="stage-dialog-heading">
-    <h2 id="clanTitle">Роды на схеме</h2>
-    <form method="dialog"><button type="submit" aria-label="Закрыть роды">×</button></form>
-  </div>
-  <div class="stage-list" id="clanList"></div>
-</dialog>
+<footer>Разработка — Павел Железняк<button id="ver" title="История изменений">v2.10.19</button></footer>
 <div id="lb" role="dialog" aria-modal="true"><div class="box"></div></div>
 <template id="helpT">
 <button class="close" aria-label="Закрыть">×</button>
 <h2>Как читать схему</h2>
 <h3>Карточки</h3>
 <ul>
-<li><b>Светло-голубая</b> карточка — мужчина, <b>сливочная</b> — женщина.</li>
-<li><b>Цветная полоска слева</b> — род человека (Новиковы, Белозеровы, Кутрюмовы, Левкины, Бобровы, Бычины, Логиновы, Шестаковы, Железняки). Род считается по отцу; жена с неизвестными родителями — в роду мужа. Цвета — в легенде под заголовком схемы.</li>
-<li>На общем плане видны подписи семей. Нажмите на подпись, чтобы приблизиться. На среднем масштабе видны имена, фамилии и годы жизни. При приближении добавляются отчества, девичьи фамилии и точные даты, если они известны.</li>
+<li><b>Голубая</b> карточка — мужчина, <b>оранжевая</b> — женщина.</li>
+<li><b>Цветная полоска сверху</b> — род человека (Новиковы, Белозеровы, Кутрюмовы, Левкины, Бобровы, Бычины, Логиновы, Шестаковы, Железняки). Род считается по отцу; жена с неизвестными родителями — в роду мужа. Цвета — в легенде под заголовком схемы.</li>
+<li>В карточке: фамилия (у замужних женщин девичья — в скобках), имя, отчество, даты жизни.</li>
 <li><b>Толстая рамка</b> — человек найден в архивных документах (метриках, ревизских сказках).</li>
 <li><b>Пунктирная рамка карточки</b> — известен только по семейному преданию.</li>
 <li>Когда выбран человек, на карточках его родных появляется подпись — кем они ему приходятся: «отец», «бабушка», «пра(3)дед», «сестра», «внучка», «зять»…</li>
@@ -72,13 +42,12 @@
 <li>«~1850» — год примерно оценён по родственникам, документов нет.</li>
 <li>Даты XIX века — по старому стилю, как в метрических книгах.</li>
 </ul>
-<p>На телефоне кнопка <b>«Ветви»</b> открывает список с крупными кнопками, а <b>«Масштаб»</b> позволяет приблизить, отдалить или вписать схему. В карточке человека можно нажать <b>«На весь экран»</b> и затем вернуться к схеме.</p>
 <h3>Свёрнутые рода</h3>
 <ul>
 <li>Сначала показаны Новиковы из Чикашей. Семьи, из которых в род пришли жёны и мужья, свёрнуты, и большие ветви внуков Николая и Ефросиньи — тоже.</li>
 <li>Цветной язычок под карточкой, например «＋ Белозеровы и Бобровы · 26» или «＋ потомки Раисы · 19», — нажмите, и эта часть раскроется: схема перестроится, а нажатое место останется на экране. Белый язычок «− свернуть» сворачивает обратно.</li>
-<li>Кнопка «Раскрыть всё» раскрывает все рода и ветви, «Свернуть всё» возвращает исходный вид. На телефоне обе команды находятся в списке «Ветви».</li>
-<li>На компьютере список родов под заголовком, на телефоне — по кнопке «Роды» внизу. Выбор рода покажет его на схеме и приглушит остальные карточки.</li>
+<li>Кнопка «Раскрыть всё» раскрывает все рода и ветви сразу, «Свернуть всё» — возвращает как было.</li>
+<li>Под заголовком — все рода и сколько в них человек. Нажмите на род: он раскроется, схема покажет его целиком, а остальных приглушит.</li>
 </ul>
 <h3>Семьи и рамки</h3>
 <ul>
@@ -103,8 +72,7 @@
 </ul>
 </template>
 <script src="js/error-handler.js" defer></script>
-<script src="js/view-layout.js?v=2.10.30" defer></script>
-<script src="js/macro-layout.js?v=2.10.30" defer></script>
-<script src="js/app.js?v=2.10.30" defer></script>
+<script src="js/view-layout.js?v=2.10.19" defer></script>
+<script src="js/app.js?v=2.10.19" defer></script>
 </body>
 </html>
