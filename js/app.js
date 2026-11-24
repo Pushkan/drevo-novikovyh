@@ -1,28 +1,4 @@
-<!DOCTYPE html>
-
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta content="width=device-width,initial-scale=1.0" name="viewport"/>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-    }
-  </style>
-</head>
-<body>
-<!-- STITCH_THREEJS_START:ANIMATION_32 class="fixed inset-0 w-full h-full bg-transparent" -->
-<div class="fixed inset-0 w-full h-full bg-transparent" style="display:block;">
-<script src="https://ajax.googleapis.com/ajax/libs/threejs/r125/three.min.js"></script>
-<div id="threejs-container-ANIMATION_32" style="width:100%;height:100%"></div>
-<script>
-(function() {
-  const container = document.getElementById('threejs-container-ANIMATION_32');
+ const container = document.getElementById('threejs-container-ANIMATION_32');
   const devicePixelRatio = window.devicePixelRatio || 1;
   (async () => {
 // ==========================================================================
@@ -1433,9 +1409,3 @@ setTimeout(() => {
 
 })();
 
-})();
-</script>
-</div>
-<!-- STITCH_THREEJS_END:ANIMATION_32 -->
-</body>
-</html>
