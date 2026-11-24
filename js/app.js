@@ -2448,16 +2448,17 @@ function start() {
     { const n = Object.keys(D.people).length; document.getElementById('total').textContent = `${n} ${ppl(n)}`; }
     renderView(0, 0);
     stageActions.hidden = false;
-    if (mobile.matches && VIEW.cards.I5 && VIEW.cards.I7) {
-      const a = VIEW.cards.I5, b = VIEW.cards.I7, r = stage.getBoundingClientRect();
-      macroFitted = false;
-      st.s = 1;
-      // Если супруги далеко друг от друга, в кадре должен остаться Николай, а не промежуток между карточками.
-      const span = Math.abs(a[0] - b[0]) + CW;
-      const cx = (span * st.s + 16 <= r.width ? (a[0] + b[0]) / 2 : a[0]) + CW / 2;
-      const cy = a[1] + CH / 2;
-      st.x = r.width / 2 - cx * st.s; st.y = r.height * 0.6 - cy * st.s; apply();
-    } else fitAll();
+    // if (mobile.matches && VIEW.cards.I5 && VIEW.cards.I7) {
+    //   const a = VIEW.cards.I5, b = VIEW.cards.I7, r = stage.getBoundingClientRect();
+    //   macroFitted = false;
+    //   st.s = 1;
+    //   // Если супруги далеко друг от друга, в кадре должен остаться Николай, а не промежуток между карточками.
+    //   const span = Math.abs(a[0] - b[0]) + CW;
+    //   const cx = (span * st.s + 16 <= r.width ? (a[0] + b[0]) / 2 : a[0]) + CW / 2;
+    //   const cy = a[1] + CH / 2;
+    //   st.x = r.width / 2 - cx * st.s; st.y = r.height * 0.6 - cy * st.s; apply();
+    // } else fitAll();
+    fitAll();
     setTimeout(() => { const h = document.getElementById('hint'); if (h) h.remove(); }, 6000);
   } catch (err) {
     console.error(err);
