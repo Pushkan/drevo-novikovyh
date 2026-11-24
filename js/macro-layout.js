@@ -1,7 +1,8 @@
 (function () {
-  const FAMILY_WIDTH = 150;
-  const COLUMN_GAP = 14;
-  const ROW_GAP = 36;
+  const FAMILY_WIDTH = 208;
+  const CHILDREN_PER_ROW = 8;
+  const COLUMN_GAP = 16;
+  const ROW_GAP = 46;
 
   window.NovikovyMacroLayout = function (data, positions, matches, familyTitle, cardWidth, cardHeight) {
     const nodes = [];
@@ -14,6 +15,9 @@
       const left = Math.min(...cards.map(card => card.x));
       const right = Math.max(...cards.map(card => card.x)) + cardWidth;
       node.target = {x: (left + right) / 2, y: Math.min(...cards.map(card => card.y)) + cardHeight / 2, width: right - left};
+      const anchor = cards.reduce((closest, card) =>
+        Math.abs(card.x + cardWidth / 2 - node.target.x) < Math.abs(closest.x + cardWidth / 2 - node.target.x) ? card : closest);
+      node.zoomTarget = {x: anchor.x + cardWidth / 2, y: anchor.y + cardHeight / 2};
       node.incoming = new Set();
       node.outgoing = new Set();
       node.depth = Math.min(...cards.map(card => generation.get(card.y)));
@@ -26,12 +30,19 @@
       const shownParents = parents.filter(parent => positions[parent] && matches(parent));
       const node = {
         family: id, label: familyTitle(id), children, width: FAMILY_WIDTH,
-        height: 46 + 9 * (Math.ceil(children.length / 10) - 1)
+        markerColumns:Math.min(children.length, CHILDREN_PER_ROW),
+        height: 98 + 17 * (Math.ceil(children.length / CHILDREN_PER_ROW) - 1)
       };
       add(node, children);
       node.depth -= 1;
       if (shownParents.length) {
-        const parentY = Math.min(...shownParents.map(parent => positions[parent].y));
+        const [first, second] = shownParents.map(parent => positions[parent]);
+        node.zoomTarget = {x: first.x + cardWidth / 2, y: first.y + cardHeight / 2};
+        if (second && first.y === second.y) {
+          node.zoomPair = {x: (first.x + second.x + cardWidth) / 2, y: node.zoomTarget.y,
+            width: Math.abs(first.x - second.x) + cardWidth};
+        }
+        const parentY = second ? Math.min(first.y, second.y) : first.y;
         node.depth = Math.min(node.depth, generation.get(parentY));
         node.target.y = (parentY + node.target.y) / 2 + cardHeight / 4;
       }
