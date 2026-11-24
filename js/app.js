@@ -1,5 +1,4 @@
- const container = document.getElementById('threejs-container-ANIMATION_32');
-  const devicePixelRatio = window.devicePixelRatio || 1;
+
   (async () => {
 // ==========================================================================
 // FAMILY ARCHIVE — js/app.js
