@@ -1,19 +1,19 @@
-
-  (async () => {
+(async () => {
 // ==========================================================================
-// FAMILY ARCHIVE — js/app.js
+// FAMILY ARCHIVE — js/app.js (v2.11.0)
 // Родословная Новиковых из д. Чикаши
 // ==========================================================================
 
-// Load the published JSON before attaching the interface controls.
+// Загрузка данных
 const loadJSON = async path => {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
   return response.json();
 };
+
 const [initialData, initialViews] = await Promise.all([
-  loadJSON('data/tree-data.json?v=2.10.30'),
-  loadJSON('data/tree-views.json?v=2.10.30')
+  loadJSON('data/tree-data.json?v=2.11.0'),
+  loadJSON('data/tree-views.json?v=2.11.0')
 ]);
 
 const stage = document.getElementById('stage'), panel = document.getElementById('panel');
@@ -28,33 +28,49 @@ const expandBranches = document.getElementById('expandBranches');
 const collapseBranches = document.getElementById('collapseBranches');
 const clanDialog = document.getElementById('clanDialog');
 const clanList = document.getElementById('clanList');
-// The controls share the stage's size but sit outside its gesture surface.
-stage.append(overviewLayer, stageActions);
+
+if (overviewLayer && stageActions) {
+  stage.append(overviewLayer, stageActions);
+}
+
 let svg = null, D = null, W = 1, H = 1;
 const st = {s: 1, x: 0, y: 0};
 let movT = null;
 const OVERVIEW_SCALE = 0.55, BLEND_START = 0.63, BLEND_END = 0.47;
 const inOverview = () => st.s <= OVERVIEW_SCALE;
 const overviewScale = () => st.s / OVERVIEW_SCALE;
-const FARZ = 0.85;                       // ниже порога видны имя, фамилия и годы
+const FARZ = 0.85;
 let isFar = null;
-const apply = () => { if (!svg) return; svg.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`;
-  const f = st.s < FARZ; if (f !== isFar) { isFar = f; svg.classList.toggle('far', f); }
+
+const apply = () => { 
+  if (!svg) return; 
+  svg.style.transform = `translate(${st.x}px,${st.y}px) scale(${st.s})`;
+  const f = st.s < FARZ; 
+  if (f !== isFar) { isFar = f; svg.classList.toggle('far', f); }
   const mix = Math.max(0, Math.min(1, (BLEND_START - st.s) / (BLEND_START - BLEND_END)));
   const opacity = mix * mix * (3 - 2 * mix);
   const overview = inOverview();
   svg.style.opacity = 1 - opacity;
   svg.classList.toggle('overview', overview);
   svg.setAttribute('aria-hidden', overview);
-  overviewLayer.hidden = false;
-  overviewLayer.inert = !overview;
-  overviewLayer.style.opacity = opacity;
+  if (overviewLayer) {
+    overviewLayer.hidden = false;
+    overviewLayer.inert = !overview;
+    overviewLayer.style.opacity = opacity;
+  }
   if (mix > 0) paintMacro();
   mmView();
 };
-// ускорение (готовый «снимок» схемы) — только при перетаскивании
-const panning = () => { if (!svg) return; svg.classList.add('moving'); clearTimeout(movT); movT = setTimeout(() => svg.classList.remove('moving'), 250); };
+
+const panning = () => { 
+  if (!svg) return; 
+  svg.classList.add('moving'); 
+  clearTimeout(movT); 
+  movT = setTimeout(() => svg.classList.remove('moving'), 250); 
+};
+
 const clampS = s => Math.max(0.001, Math.min(4, s));
+
 function zoomAt(f, cx, cy) {
   stopMacroZoom();
   if (svg) { clearTimeout(movT); svg.classList.remove('moving'); }
@@ -85,14 +101,17 @@ function zoomAt(f, cx, cy) {
   }
   apply();
 }
+
 function fitBox(x, y, w, h, pad = 40) {
   const r = stage.getBoundingClientRect();
   const s = clampS(Math.min((r.width - 2 * pad) / w, (r.height - 2 * pad) / h, 1.6));
   if (s < BLEND_START) { fitAll(); return; }
   stopMacroZoom();
   macroFitted = false;
-  st.s = s; st.x = (r.width - w * s) / 2 - x * s; st.y = (r.height - h * s) / 2 - y * s; apply();
+  st.s = s; st.x = (r.width - w * s) / 2 - x * s; st.y = (r.height - h * s) / 2 - y * s; 
+  apply();
 }
+
 const fitAll = () => {
   stopMacroZoom();
   ensureOverview();
@@ -100,6 +119,7 @@ const fitAll = () => {
   st.s = macroFit().scale * OVERVIEW_SCALE;
   apply();
 };
+
 const norm = t => (t || '').toLowerCase().replace(/ё/g, 'е');
 const esc = t => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const linkify = t => esc(t).replace(/https?:\/\/[^\s)»,;]+/g, u => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
@@ -107,41 +127,67 @@ const pName = id => D.people[id] ? D.people[id].name : id;
 const pDates = id => { const l = D.people[id].lines; return l.find(t => /\d{4}|^~/.test(t)) || ''; };
 
 /* --- перетаскивание и масштаб --- */
-const ptrs = new Map(); let moved = 0, last = null, pinch = null, lastTap = {t: 0, x: 0, y: 0}, tapTimer = null;
+const ptrs = new Map(); 
+let moved = 0, last = null, pinch = null, lastTap = {t: 0, x: 0, y: 0}, tapTimer = null;
+
 function tapAction(x, y) {
   const hit = document.elementFromPoint(x, y);
   const chip = hit && hit.closest ? hit.closest('.chip') : null;
-  if (chip) { clanOff(); if (chip.dataset.b != null) toggleBranch(+chip.dataset.b); else toggleGroup(+chip.dataset.g); return; } 
+  if (chip) { 
+    clanOff(); 
+    if (chip.dataset.b != null) toggleBranch(+chip.dataset.b); 
+    else toggleGroup(+chip.dataset.g); 
+    return; 
+  }
   const el = hit && hit.closest ? hit.closest('.person') : null;
-  if (el) select(el.dataset.p); else clearSel();
+  if (el) select(el.dataset.p); 
+  else clearSel();
 }
-{ 
-  const mm = document.getElementById('mm'); let dn = false;
-  mm.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); dn = true; mm.setPointerCapture(e.pointerId); mmGo(e); });
-  mm.addEventListener('pointermove', e => { if (dn) { e.stopPropagation(); mmGo(e); } });
-  mm.addEventListener('pointerup', e => { e.stopPropagation(); dn = false; });
+
+{
+  const mm = document.getElementById('mm'); 
+  let dn = false;
+  if (mm) {
+    mm.addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); dn = true; mm.setPointerCapture(e.pointerId); mmGo(e); });
+    mm.addEventListener('pointermove', e => { if (dn) { e.stopPropagation(); mmGo(e); } });
+    mm.addEventListener('pointerup', e => { e.stopPropagation(); dn = false; });
+  }
 }
+
 stage.addEventListener('pointerdown', e => {
-  if (stageActions.contains(e.target)) return;
+  if (stageActions && stageActions.contains(e.target)) return;
   stopMacroZoom();
-  zoomMenu.open = false;
+  if (zoomMenu) zoomMenu.open = false;
   if (!e.target.closest('.overview-label')) {
-    e.preventDefault(); var _s=window.getSelection&&window.getSelection(); if(_s) _s.removeAllRanges();
+    e.preventDefault(); 
+    var _s = window.getSelection && window.getSelection(); 
+    if (_s) _s.removeAllRanges();
     stage.setPointerCapture(e.pointerId);
   }
-  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY}); moved = 0;
-  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = {d: Math.hypot(a.x - b.x, a.y - b.y)}; }
-  last = {x: e.clientX, y: e.clientY}; stage.classList.add('drag');
+  ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY}); 
+  moved = 0;
+  if (ptrs.size === 2) { 
+    const [a, b] = [...ptrs.values()]; 
+    pinch = {d: Math.hypot(a.x - b.x, a.y - b.y)}; 
+  }
+  last = {x: e.clientX, y: e.clientY}; 
+  stage.classList.add('drag');
 });
+
 stage.addEventListener('pointermove', e => {
   if (!ptrs.has(e.pointerId)) return;
   ptrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
   const r = stage.getBoundingClientRect();
   if (ptrs.size === 2 && pinch) {
-    const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
-    zoomAt(d / pinch.d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top); pinch.d = d; moved += 10; return;
+    const [a, b] = [...ptrs.values()]; 
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    zoomAt(d / pinch.d, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top); 
+    pinch.d = d; 
+    moved += 10; 
+    return;
   }
-  const dx = e.clientX - last.x, dy = e.clientY - last.y; moved += Math.abs(dx) + Math.abs(dy);
+  const dx = e.clientX - last.x, dy = e.clientY - last.y; 
+  moved += Math.abs(dx) + Math.abs(dy);
   if (inOverview() && macroOffset) {
     if (moved >= 6) {
       if (!stage.hasPointerCapture(e.pointerId)) stage.setPointerCapture(e.pointerId);
@@ -157,14 +203,20 @@ stage.addEventListener('pointermove', e => {
   if (st.s < BLEND_START && macroOffset) {
     macroOffset.x += dx; macroOffset.y += dy;
   }
-  st.x += dx; st.y += dy; last = {x: e.clientX, y: e.clientY}; panning(); apply();
+  st.x += dx; st.y += dy; 
+  last = {x: e.clientX, y: e.clientY}; 
+  panning(); 
+  apply();
 });
+
 const up = e => {
   if (!ptrs.has(e.pointerId)) return;
-  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null; stage.classList.remove('drag');
+  ptrs.delete(e.pointerId); 
+  if (ptrs.size < 2) pinch = null; 
+  stage.classList.remove('drag');
+  
   if (inOverview()) {
-    if (e.type === 'pointerup' && moved < 6 && overviewScale() < 0.28 &&
-        !e.target.closest('.overview-label')) {
+    if (e.type === 'pointerup' && moved < 6 && overviewScale() < 0.28 && !e.target.closest('.overview-label')) {
       const rect = stage.getBoundingClientRect();
       const x = e.clientX - rect.left, y = e.clientY - rect.top;
       const node = nearestMacro(x, y);
@@ -179,7 +231,8 @@ const up = e => {
   if (e.type === 'pointerup' && moved < 6 && ptrs.size === 0) {
     const now = Date.now(), r0 = stage.getBoundingClientRect();
     if (now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
-      clearTimeout(tapTimer); lastTap.t = 0;
+      clearTimeout(tapTimer); 
+      lastTap.t = 0;
       animView(() => zoomAt(1.8, e.clientX - r0.left, e.clientY - r0.top));
       return;
     }
@@ -191,28 +244,45 @@ const up = e => {
   }
   if (ptrs.size === 1) last = [...ptrs.values()][0];
 };
-stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
-stage.addEventListener('wheel', e => { 
-  if (stageActions.contains(e.target)) return; 
-  e.preventDefault(); 
+
+stage.addEventListener('pointerup', up); 
+stage.addEventListener('pointercancel', up);
+
+stage.addEventListener('wheel', e => {
+  if (stageActions && stageActions.contains(e.target)) return;
+  e.preventDefault();
   const r = stage.getBoundingClientRect();
-  zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); 
+  zoomAt(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
 }, {passive: false});
-const center = () => { const r = stage.getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
-zoomMenu.addEventListener('click', e => {
-  const button = e.target.closest('[data-zoom]');
-  if (!button) return;
-  if (button.dataset.zoom === 'fit') {
-    clearSel();
-    animView(fitAll);
-    zoomMenu.open = false;
-    zoomMenu.querySelector('summary').focus();
-    return;
-  }
-  const step = button.dataset.zoom === 'in' ? 1.25 : 1 / 1.25;
-  zoomAt(step, ...center());
-});
+
+const center = () => { 
+  const r = stage.getBoundingClientRect(); 
+  return [r.width / 2, r.height / 2]; 
+};
+
+if (zoomMenu) {
+  zoomMenu.addEventListener('click', e => {
+    const button = e.target.closest('[data-zoom]');
+    if (!button) return;
+    if (button.dataset.zoom === 'fit') {
+      clearSel();
+      animView(fitAll);
+      zoomMenu.open = false;
+      zoomMenu.querySelector('summary')?.focus();
+      return;
+    }
+    const step = button.dataset.zoom === 'in' ? 1.25 : 1 / 1.25;
+    zoomAt(step, ...center());
+  });
+}
+
+const ppl = n => {
+  const m = n % 10, h = n % 100;
+  return (m === 1 && h !== 11) ? 'человек' : (m >= 2 && m <= 4 && (h < 12 || h > 14)) ? 'человека' : 'человек';
+};
+
 function renderBranchList() {
+  if (!branchList) return;
   branchList.innerHTML = branchControls(VIEW).map(({group, index, title, count, open, color}) => {
     const detail = open
       ? '<span class="branch-state">Развёрнута</span> · Свернуть ветвь'
@@ -220,50 +290,61 @@ function renderBranchList() {
     return `<button type="button" data-${group ? 'g' : 'b'}="${index}" aria-expanded="${Boolean(open)}"><i style="--branch-color:${color}" aria-hidden="true"></i><span>${esc(title)}<small>${detail}</small></span><b aria-hidden="true">${open ? '−' : '+'}</b></button>`;
   }).join('');
 }
-document.getElementById('branchToggle').onclick = () => {
-  zoomMenu.open = false;
-  renderBranchList();
-  branchDialog.showModal();
-};
-branchList.addEventListener('click', e => {
-  const button = e.target.closest('button[data-g], button[data-b]');
-  if (!button) return;
-  const scrollTop = branchDialog.scrollTop;
-  const group = button.dataset.g != null;
-  const index = +(group ? button.dataset.g : button.dataset.b);
-  const anchor = group ? VIEWS.groups[index][1] || 'I35' : VIEWS.branches[index][0];
-  clearSel();
-  if (group) toggleGroup(index);
-  else toggleBranch(index);
-  renderBranchList();
-  branchList.querySelector(`[data-${group ? 'g' : 'b'}="${index}"]`)?.focus({preventScroll: true});
-  branchDialog.scrollTop = scrollTop;
-  const [x, y] = VIEW.cards[anchor];
-  const [cx, cy] = center();
-  animView(() => { st.x = cx - (x + CW / 2) * st.s; st.y = cy - (y + CH / 2) * st.s; apply(); });
-});
+
+const branchToggle = document.getElementById('branchToggle');
+if (branchToggle && branchDialog) {
+  branchToggle.onclick = () => {
+    if (zoomMenu) zoomMenu.open = false;
+    renderBranchList();
+    branchDialog.showModal();
+  };
+}
+
+if (branchList) {
+  branchList.addEventListener('click', e => {
+    const button = e.target.closest('button[data-g], button[data-b]');
+    if (!button) return;
+    const scrollTop = branchDialog.scrollTop;
+    const group = button.dataset.g != null;
+    const index = +(group ? button.dataset.g : button.dataset.b);
+    const anchor = group ? VIEWS.groups[index][1] || 'I35' : VIEWS.branches[index][0];
+    clearSel();
+    if (group) toggleGroup(index);
+    else toggleBranch(index);
+    renderBranchList();
+    branchList.querySelector(`[data-${group ? 'g' : 'b'}="${index}"]`)?.focus({preventScroll: true});
+    branchDialog.scrollTop = scrollTop;
+    const [x, y] = VIEW.cards[anchor];
+    const [cx, cy] = center();
+    animView(() => { st.x = cx - (x + CW / 2) * st.s; st.y = cy - (y + CH / 2) * st.s; apply(); });
+  });
+}
+
 mobile.addEventListener('change', e => {
   if (e.matches) return;
   setReading(false);
-  zoomMenu.open = false;
-  if (branchDialog.open) branchDialog.close();
-  if (clanDialog.open) clanDialog.close();
+  if (zoomMenu) zoomMenu.open = false;
+  if (branchDialog && branchDialog.open) branchDialog.close();
+  if (clanDialog && clanDialog.open) clanDialog.close();
 });
+
 function setAllBranches(expand) {
-  if (branchDialog.open) branchDialog.close();
+  if (branchDialog && branchDialog.open) branchDialog.close();
   clearSel();
   renderView(expand ? ALLG() : 0, expand ? ALLB() : 0);
   setTimeout(() => animView(fitAll), 50);
 }
+
 const allBranchesOpen = () => MASK === ALLG() && BMASK === ALLB();
-allButton.onclick = () => setAllBranches(!allBranchesOpen());
-expandBranches.onclick = () => setAllBranches(true);
-collapseBranches.onclick = () => setAllBranches(false);
+if (allButton) allButton.onclick = () => setAllBranches(!allBranchesOpen());
+if (expandBranches) expandBranches.onclick = () => setAllBranches(true);
+if (collapseBranches) collapseBranches.onclick = () => setAllBranches(false);
+
 addEventListener('keydown', e => {
-  if (e.key !== 'Escape' || branchDialog.open || clanDialog.open) return;
-  if (lb.classList.contains('open')) lb.classList.remove('open', 'img');
+  if (e.key !== 'Escape' || (branchDialog && branchDialog.open) || (clanDialog && clanDialog.open)) return;
+  if (lb && lb.classList.contains('open')) lb.classList.remove('open', 'img');
   else if (panel.classList.contains('reading')) setReading(false, true);
-  else if (zoomMenu.open) { zoomMenu.open = false; zoomMenu.querySelector('summary').focus(); }
+  else if (zoomMenu && zoomMenu.open) { zoomMenu.open = false; zoomMenu.querySelector('summary')?.focus(); }
   else clearSel();
 });
 
@@ -276,10 +357,16 @@ function relatives(id) {
   const on = new Set([id, ...anc, ...desc, ...(D.people[id].sp || []), ...otherParentsOf(id)]);
   return {on, anc, desc};
 }
+
 function bboxOf(ids) {
   let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
-  ids.forEach(id => { const g = svg.querySelector(`.person[data-p="${id}"]`); if (!g) return; const b = g.getBBox();
-    x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.width); y2 = Math.max(y2, b.y + b.height); });
+  ids.forEach(id => { 
+    const g = svg.querySelector(`.person[data-p="${id}"]`); 
+    if (!g) return; 
+    const b = g.getBBox();
+    x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); 
+    x2 = Math.max(x2, b.x + b.width); y2 = Math.max(y2, b.y + b.height); 
+  });
   return [x1, y1, x2 - x1, y2 - y1];
 }
 
@@ -294,13 +381,18 @@ function initFocus() {
     [o.h, o.w].forEach(q => { if (q) (famsOf[q] = famsOf[q] || []).push(f); });
     o.ks.forEach(k => { parentFam[k] = f; });
   });
-  focL = document.createElementNS(SVGNS, 'g'); focL.id = 'focL';
+  focL = document.createElementNS(SVGNS, 'g'); 
+  focL.id = 'focL';
   svg.appendChild(focL);
   svg.style.overflow = 'visible';
 }
+
 const yr = p => D.people[p].card.yr;
 const isM = p => D.people[p].sex === 'M';
-const first = p => { const g = D.people[p].given || ''; return g.startsWith('Мать ') ? 'первая жена' : (g.replace(/[()]/g, '').split(' ')[0] || '?'); };
+const first = p => { 
+  const g = D.people[p].given || ''; 
+  return g.startsWith('Мать ') ? 'первая жена' : (g.replace(/[()]/g, '').split(' ')[0] || '?'); 
+};
 const famsSorted = p => (famsOf[p] || []).slice().sort((a, b) => D.fams[a].m - D.fams[b].m);
 const otherParentIn = (f, p) => D.fams[f].h === p ? D.fams[f].w : D.fams[f].h;
 const otherParentsOf = p => [...new Set((famsOf[p] || [])
@@ -315,17 +407,25 @@ function unitOf(p) {
   else { m = []; if (sp[0]) m.push(sp[0]); m.push(p); sp.slice(1).forEach(s => s && m.push(s)); }
   return {p, m, fs};
 }
+
 function mergeCont(A, B, off) {
   const out = A.map(v => v.slice());
-  B.forEach(([l, r], k) => { const L_ = l + off, R_ = r + off;
-    if (!out[k]) out[k] = [L_, R_]; else out[k] = [Math.min(out[k][0], L_), Math.max(out[k][1], R_)]; });
+  B.forEach(([l, r], k) => { 
+    const L_ = l + off, R_ = r + off;
+    if (!out[k]) out[k] = [L_, R_]; 
+    else out[k] = [Math.min(out[k][0], L_), Math.max(out[k][1], R_)]; 
+  });
   return out;
 }
+
 function sepCont(A, B, g0, g) {
   let d = -1e9;
-  for (let k = 0; k < Math.min(A.length, B.length); k++) if (A[k] && B[k]) d = Math.max(d, A[k][1] - B[k][0] + (k ? g : g0));
+  for (let k = 0; k < Math.min(A.length, B.length); k++) {
+    if (A[k] && B[k]) d = Math.max(d, A[k][1] - B[k][0] + (k ? g : g0));
+  }
   return d;
 }
+
 function measure(p, depth) {
   const u = unitOf(p);
   u.uw = u.m.length * CW + (u.m.length - 1) * IG;
@@ -363,6 +463,7 @@ function measure(p, depth) {
   }
   return u;
 }
+
 function placeDesc(u, left, row, L) {
   let x = left;
   u.m.forEach(q => { L.pos[q] = {x, row, lvl: u.lvl || 0}; x += CW + IG; });
@@ -391,11 +492,13 @@ function ancFam(f, depth) {
     t.cards.forEach(([id, x, dd]) => cards.push([id, x + off[i], dd + 1]));
     t.cont.forEach(([l, r], k) => {
       const kk = k + 1; const L_ = l + off[i], R_ = r + off[i];
-      if (!cont[kk]) cont[kk] = [L_, R_]; else cont[kk] = [Math.min(cont[kk][0], L_), Math.max(cont[kk][1], R_)];
+      if (!cont[kk]) cont[kk] = [L_, R_]; 
+      else cont[kk] = [Math.min(cont[kk][0], L_), Math.max(cont[kk][1], R_)];
     });
   });
   return {cards, cont};
 }
+
 function anc(p, depth) {
   const f = parentFam[p];
   const up = f ? ancFam(f, depth) : {cards: [], cont: []};
@@ -484,7 +587,10 @@ function focusLayout(id) {
 /* --- отрисовка карточки и текста --- */
 const CARD_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
 const cardMeasure = document.createElement('canvas').getContext('2d');
-const plural = (n, a, b, c) => { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; };
+const plural = (n, a, b, c) => { 
+  const m = n % 10, h = n % 100; 
+  return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 12 || h > 14) ? b : c; 
+};
 const AGE = {};
 function ageOf(p) {
   if (p in AGE) return AGE[p];
@@ -493,19 +599,27 @@ function ageOf(p) {
   if (t) {
     const [a, b] = t.split(' – ').map(x => x.trim());
     const approx = /~|ок\.|\?/.test(a + b);
-    const pd = x => { let m = x.match(/(\d\d)\.(\d\d)\.(\d{4})/); if (m) return {y: +m[3], m: +m[2], d: +m[1], full: true};
-      m = x.match(/(\d{4})/); return m ? {y: +m[1], full: false} : null; };
+    const pd = x => { 
+      let m = x.match(/(\d\d)\.(\d\d)\.(\d{4})/); 
+      if (m) return {y: +m[3], m: +m[2], d: +m[1], full: true};
+      m = x.match(/(\d{4})/); 
+      return m ? {y: +m[1], full: false} : null; 
+    };
     const A = pd(a), B = pd(b);
     if (A && B) {
       if (A.full && B.full) {
-        let y = B.y - A.y; if (B.m < A.m || (B.m === A.m && B.d < A.d)) y--;
+        let y = B.y - A.y; 
+        if (B.m < A.m || (B.m === A.m && B.d < A.d)) y--;
         if (y >= 1) r = `${approx ? '~' : ''}${y} ${plural(y, 'год', 'года', 'лет')}`;
         else {
           const days = Math.round((Date.UTC(B.y, B.m - 1, B.d) - Date.UTC(A.y, A.m - 1, A.d)) / 864e5);
           const mo = Math.floor(days / 30.44);
           r = mo >= 1 ? `${mo} ${plural(mo, 'месяц', 'месяца', 'месяцев')}` : days >= 1 ? `${days} ${plural(days, 'день', 'дня', 'дней')}` : '';
         }
-      } else { const y = B.y - A.y; if (y >= 1) r = `~${y} ${plural(y, 'год', 'года', 'лет')}`; }
+      } else { 
+        const y = B.y - A.y; 
+        if (y >= 1) r = `~${y} ${plural(y, 'год', 'года', 'лет')}`; 
+      }
     }
   }
   return AGE[p] = r;
@@ -518,29 +632,45 @@ function mmContent() {
   const pos = focusId ? Object.entries(curPos).map(([p, q]) => [p, q.x, q.y]) : Object.entries(VIEW.cards).map(([p, c]) => [p, c[0], c[1]]);
   if (!pos.length) return;
   const xs = pos.map(a => a[1]), ys = pos.map(a => a[2]);
-  MM = {x: Math.min(...xs) - 40, y: Math.min(...ys) - 40}; MM.w = Math.max(...xs) + CW + 40 - MM.x; MM.h = Math.max(...ys) + CH + 40 - MM.y;
+  MM = {x: Math.min(...xs) - 40, y: Math.min(...ys) - 40}; 
+  MM.w = Math.max(...xs) + CW + 40 - MM.x; 
+  MM.h = Math.max(...ys) + CH + 40 - MM.y;
   const ar = Math.max(0.35, Math.min(1.2, MM.h / MM.w));
   mm.setAttribute('viewBox', `0 0 ${100} ${100 * ar}`);
-  const k = Math.min(100 / MM.w, 100 * ar / MM.h); MM.k = k; MM.ox = (100 - MM.w * k) / 2; MM.oy = (100 * ar - MM.h * k) / 2;
-  document.getElementById('mmC').innerHTML = pos.map(([p, x, y]) => `<rect x="${(MM.ox + (x - MM.x) * k).toFixed(2)}" y="${(MM.oy + (y - MM.y) * k).toFixed(2)}" width="${Math.max(0.6, CW * k).toFixed(2)}" height="${Math.max(0.5, CH * k).toFixed(2)}" fill="${D.people[p] ? D.people[p].card.strip : '#999'}"/>`).join('');
+  const k = Math.min(100 / MM.w, 100 * ar / MM.h); 
+  MM.k = k; 
+  MM.ox = (100 - MM.w * k) / 2; 
+  MM.oy = (100 * ar - MM.h * k) / 2;
+  const mmC = document.getElementById('mmC');
+  if (mmC) {
+    mmC.innerHTML = pos.map(([p, x, y]) => `<rect x="${(MM.ox + (x - MM.x) * k).toFixed(2)}" y="${(MM.oy + (y - MM.y) * k).toFixed(2)}" width="${Math.max(0.6, CW * k).toFixed(2)}" height="${Math.max(0.5, CH * k).toFixed(2)}" fill="${D.people[p] ? D.people[p].card.strip : '#999'}"/>`).join('');
+  }
   mmView();
 }
+
 function mmView() {
   const box = document.getElementById('mm'); if (!box || !MM.k) return;
   if (inOverview()) { box.classList.remove('on'); return; }
   const r = stage.getBoundingClientRect();
   const vx = -st.x / st.s, vy = -st.y / st.s, vw = r.width / st.s, vh = r.height / st.s;
   const show = vw < MM.w * 0.7 || vh < MM.h * 0.7;
-  box.classList.toggle('on', show); if (!show) return;
+  box.classList.toggle('on', show); 
+  if (!show) return;
   const v = document.getElementById('mmV');
-  v.setAttribute('x', (MM.ox + (vx - MM.x) * MM.k).toFixed(2)); v.setAttribute('y', (MM.oy + (vy - MM.y) * MM.k).toFixed(2));
-  v.setAttribute('width', (vw * MM.k).toFixed(2)); v.setAttribute('height', (vh * MM.k).toFixed(2));
+  if (v) {
+    v.setAttribute('x', (MM.ox + (vx - MM.x) * MM.k).toFixed(2)); 
+    v.setAttribute('y', (MM.oy + (vy - MM.y) * MM.k).toFixed(2));
+    v.setAttribute('width', (vw * MM.k).toFixed(2)); 
+    v.setAttribute('height', (vh * MM.k).toFixed(2));
+  }
 }
+
 function mmGo(e) {
   const s_ = document.getElementById('mmS'), b = s_.getBoundingClientRect(), vb = s_.viewBox.baseVal;
   const ux = (e.clientX - b.left) / b.width * vb.width, uy = (e.clientY - b.top) / b.height * vb.height;
   const cx = MM.x + (ux - MM.ox) / MM.k, cy = MM.y + (uy - MM.oy) / MM.k, r = stage.getBoundingClientRect();
-  st.x = r.width / 2 - cx * st.s; st.y = r.height / 2 - cy * st.s; apply();
+  st.x = r.width / 2 - cx * st.s; st.y = r.height / 2 - cy * st.s; 
+  apply();
 }
 
 function cardText(text, y, preferredSize, className, weight = 400) {
@@ -601,16 +731,30 @@ function roleSVG(roleTxt) {
 function overSVG(p, relTxt) {
   return cardText(relTxt, ageOf(p) ? 84 : 78, 8.5, 'node-relation', 650);
 }
-function mkG(cls, html) { const g = document.createElementNS(SVGNS, 'g'); g.setAttribute('class', cls); g.innerHTML = html; return g; }
+function mkG(cls, html) { 
+  const g = document.createElementNS(SVGNS, 'g'); 
+  g.setAttribute('class', cls); 
+  g.innerHTML = html; 
+  return g; 
+}
+
 function setLayer(card, cls, html) {
   const old = card.querySelector(`:scope > .${cls}:not(.gone)`);
   if (old && old.dataset.h === html) return;
-  if (old) { old.classList.add('gone'); old.style.opacity = '0'; setTimeout(() => old.remove(), 450); }
+  if (old) { 
+    old.classList.add('gone'); 
+    old.style.opacity = '0'; 
+    setTimeout(() => old.remove(), 450); 
+  }
   if (!html) return;
-  const g = mkG(`fx ${cls}`, html); g.dataset.h = html; g.style.opacity = '0';
-  if (cls === 'under') card.insertBefore(g, card.firstChild); else card.appendChild(g);
+  const g = mkG(`fx ${cls}`, html); 
+  g.dataset.h = html; 
+  g.style.opacity = '0';
+  if (cls === 'under') card.insertBefore(g, card.firstChild); 
+  else card.appendChild(g);
   requestAnimationFrame(() => requestAnimationFrame(() => { g.style.opacity = '1'; }));
 }
+
 function linesSVG(L) {
   let gold = '', col = '';
   const ln = (x1, y1, x2, y2, c, g, kind = '') => {
@@ -628,10 +772,17 @@ function linesSVG(L) {
     spans.push({f, row: Math.min(...ks.map(k => L.pos[k].y)), lo: Math.min(xc, ...kxs), hi: Math.max(xc, ...kxs)});
   });
   const lane = {};
-  const byRow = {}; spans.forEach(sp => (byRow[sp.row] = byRow[sp.row] || []).push(sp));
+  const byRow = {}; 
+  spans.forEach(sp => (byRow[sp.row] = byRow[sp.row] || []).push(sp));
   Object.values(byRow).forEach(list => {
-    list.sort((a, b) => a.lo - b.lo); const ends = [];
-    list.forEach(sp => { let i = ends.findIndex(e => e + 12 < sp.lo); if (i < 0) { i = ends.length; ends.push(0); } ends[i] = sp.hi; lane[sp.f] = i; });
+    list.sort((a, b) => a.lo - b.lo); 
+    const ends = [];
+    list.forEach(sp => { 
+      let i = ends.findIndex(e => e + 12 < sp.lo); 
+      if (i < 0) { i = ends.length; ends.push(0); } 
+      ends[i] = sp.hi; 
+      lane[sp.f] = i; 
+    });
   });
   L.fams.forEach(f => {
     const o = D.fams[f], c = o.col;
@@ -715,6 +866,7 @@ const T = 650;
 const MINZ = 1.15;
 let backG = null, cardsG = null, timer = null;
 function setT(el, x, y) { el.style.transform = `translate(${x}px,${y}px)`; }
+
 function focusOn(id) {
   clearTimeout(timer);
   const L = focusLayout(id);
@@ -733,7 +885,12 @@ function focusOn(id) {
   const keep = new Set(ids);
   cardsG.querySelectorAll('.person').forEach(g => {
     const p = g.dataset.p;
-    if (!keep.has(p)) { const c = posInView(p); setT(g, c.x, c.y); g.style.opacity = '0'; setTimeout(() => g.remove(), T); }
+    if (!keep.has(p)) { 
+      const c = posInView(p); 
+      setT(g, c.x, c.y); 
+      g.style.opacity = '0'; 
+      setTimeout(() => g.remove(), T); 
+    }
   });
   ids.forEach(p => {
     let g = cardsG.querySelector(`.person[data-p="${p}"]`);
@@ -741,7 +898,8 @@ function focusOn(id) {
       g = document.createElementNS(SVGNS, 'g'); g.setAttribute('class', 'person fc'); g.dataset.p = p;
       g.appendChild(mkG('ring', `<rect x="-5" y="-5" width="${CW + 10}" height="${CH + 10}" rx="11" fill="none" stroke="#c8553d" stroke-width="2.5"/>`));
       g.appendChild(mkG('base', baseSVG(p)));
-      const c = posInView(p); setT(g, c.x, c.y);
+      const c = posInView(p); 
+      setT(g, c.x, c.y);
       g.style.opacity = entering ? '1' : '0';
       cardsG.appendChild(g);
     }
@@ -751,7 +909,12 @@ function focusOn(id) {
   });
   void cardsG.getBoundingClientRect();
   requestAnimationFrame(() => {
-    ids.forEach(p => { const g = cardsG.querySelector(`.person[data-p="${p}"]`); if (!g) return; setT(g, L.pos[p].x, L.pos[p].y); g.style.opacity = '1'; });
+    ids.forEach(p => { 
+      const g = cardsG.querySelector(`.person[data-p="${p}"]`); 
+      if (!g) return; 
+      setT(g, L.pos[p].x, L.pos[p].y); 
+      g.style.opacity = '1'; 
+    });
     timer = setTimeout(() => { if (backG) backG.style.opacity = '1'; }, T * 0.6);
   });
   curPos = L.pos; focusId = id; rebuildOverview(); mmContent();
@@ -766,18 +929,32 @@ function focusOn(id) {
     const c = L.pos[id];
     const fits = (x2 - x1) * s_ <= r.width - 30 && (y2 - y1) * s_ <= r.height - 30;
     const cx = fits ? (x1 + x2) / 2 : c.x + CW / 2, cy = fits ? (y1 + y2) / 2 : c.y + CH / 2;
-    st.s = s_; st.x = r.width / 2 - cx * s_; st.y = r.height * (fits ? 0.5 : 0.42) - cy * s_; apply();
+    st.s = s_; st.x = r.width / 2 - cx * s_; st.y = r.height * (fits ? 0.5 : 0.42) - cy * s_; 
+    apply();
   });
 }
+
 function focusOff() {
   if (!focusId) return;
   clearTimeout(timer);
-  if (backG) { backG.style.opacity = '0'; const b = backG; setTimeout(() => b.remove(), T); backG = null; }
+  if (backG) { 
+    backG.style.opacity = '0'; 
+    const b = backG; 
+    setTimeout(() => b.remove(), T); 
+    backG = null; 
+  }
   const back = new Set();
   if (cardsG) {
-    cardsG.querySelectorAll('.person').forEach(g => { const c = posInView(g.dataset.p); setT(g, c.x, c.y); if (VIEW.cards[g.dataset.p]) back.add(g.dataset.p); else g.style.opacity = '0';
-      g.classList.remove('me'); g.querySelectorAll('.fx').forEach(x => { x.style.opacity = '0'; }); });
-    const cg = cardsG; cardsG = null;
+    cardsG.querySelectorAll('.person').forEach(g => { 
+      const c = posInView(g.dataset.p); 
+      setT(g, c.x, c.y); 
+      if (VIEW.cards[g.dataset.p]) back.add(g.dataset.p); 
+      else g.style.opacity = '0';
+      g.classList.remove('me'); 
+      g.querySelectorAll('.fx').forEach(x => { x.style.opacity = '0'; }); 
+    });
+    const cg = cardsG; 
+    cardsG = null;
     setTimeout(() => {
       fullL.querySelectorAll('.person').forEach(g => { g.style.opacity = '1'; });
       cg.remove();
@@ -787,8 +964,10 @@ function focusOff() {
   fullL.style.opacity = '1'; fullL.style.pointerEvents = ''; if (chipsG) chipsG.style.display = '';
   focusId = null; curPos = {}; rebuildOverview(); mmContent();
 }
+
 function animView(fn) {
-  svg.classList.add('anim'); fn();
+  svg.classList.add('anim'); 
+  fn();
   setTimeout(() => svg.classList.remove('anim'), T + 50);
 }
 
@@ -798,10 +977,12 @@ const ALLB = () => (1 << VIEWS.branches.length) - 1;
 const ALLG = () => (1 << VIEWS.groups.length) - 1;
 const mixedView = window.NovikovyLayout(initialViews, initialData, CW, CH);
 const viewOf = (m, b) => mixedView(m, b);
+
 function buildAnch() {
   VIEWS.branches.forEach(([r, t, mem]) => mem.forEach(p => { ANCH[p] = r; }));
   VIEWS.groups.forEach(([k, sp, t, mem]) => mem.forEach(p => { ANCH[p] = sp || 'I35'; }));
 }
+
 function posIn(v, p) {
   let q = p, dy = 0;
   for (let i = 0; i < 6 && q; i++) {
@@ -811,6 +992,7 @@ function posIn(v, p) {
   return {x: v.W / 2, y: 0};
 }
 const posInView = p => posIn(VIEW, p);
+
 function familyTitle(f) {
   const {h, w, ks} = D.fams[f];
   const parents = [h, w].filter(Boolean);
@@ -818,10 +1000,12 @@ function familyTitle(f) {
   const clans = new Set(ks.map(id => D.people[id].clan));
   return clans.size === 1 && [...clans][0] || 'Семья';
 }
+
 function frameLabel(f) {
   const {h, w} = D.fams[f];
   return (h || w ? 'дети: ' : '') + familyTitle(f);
 }
+
 function placeFamilyCaptions(layer) {
   const segments = [...layer.querySelectorAll('line')].map(line =>
     ['x1', 'x2', 'y1', 'y2'].map(key => Number(line.getAttribute(key))));
@@ -845,6 +1029,7 @@ function placeFamilyCaptions(layer) {
     layer.appendChild(caption);
   }
 }
+
 function backHTML(v) {
   let s = '';
   v.frames.forEach(([f, x, y, w, h]) => {
@@ -863,7 +1048,7 @@ let overviewLayout = null, macroOffset = null, overviewDirty = true, overviewFra
 let macroFitted = false, macroZoomFrame = 0;
 const macroPlane = document.createElement('div');
 macroPlane.className = 'macro-plane';
-overviewLayer.appendChild(macroPlane);
+if (overviewLayer) overviewLayer.appendChild(macroPlane);
 
 function rebuildOverview() {
   overviewDirty = true;
@@ -1086,7 +1271,7 @@ function renderView(m, b) {
   chipsG.innerHTML = chipsHTML(nextV);
   fullL.appendChild(chipsG);
 
-  allButton.textContent = allBranchesOpen() ? 'Свернуть всё' : 'Раскрыть всё';
+  if (allButton) allButton.textContent = allBranchesOpen() ? 'Свернуть всё' : 'Раскрыть всё';
   rebuildOverview();
   mmContent();
 }
@@ -1133,34 +1318,40 @@ function initLegend() {
     if (c) clans[c] = (clans[c] || 0) + 1;
   });
   const nav = document.getElementById('legend');
-  const buttons = Object.entries(clans).map(([c, count]) => {
-    const color = Object.values(D.people).find(p => p.card.stripT === c)?.card.strip || '#4a7c59';
-    return `<button type="button" data-clan="${esc(c)}"><i style="background:${color}" aria-hidden="true"></i>${esc(c)}<b>${count}</b></button>`;
-  }).join('');
-  nav.innerHTML = buttons;
-  clanList.innerHTML = Object.entries(clans).map(([c, count]) => {
-    const color = Object.values(D.people).find(p => p.card.stripT === c)?.card.strip || '#4a7c59';
-    return `<button type="button" data-clan="${esc(c)}"><i style="background:${color}" aria-hidden="true"></i><span>${esc(c)}</span><b>${count}</b></button>`;
-  }).join('');
+  if (nav) {
+    nav.innerHTML = Object.entries(clans).map(([c, count]) => {
+      const color = Object.values(D.people).find(p => p.card.stripT === c)?.card.strip || '#4a7c59';
+      return `<button type="button" data-clan="${esc(c)}"><i style="background:${color}" aria-hidden="true"></i>${esc(c)}<b>${count}</b></button>`;
+    }).join('');
+  }
+  if (clanList) {
+    clanList.innerHTML = Object.entries(clans).map(([c, count]) => {
+      const color = Object.values(D.people).find(p => p.card.stripT === c)?.card.strip || '#4a7c59';
+      return `<button type="button" data-clan="${esc(c)}"><i style="background:${color}" aria-hidden="true"></i><span>${esc(c)}</span><b>${count}</b></button>`;
+    }).join('');
+  }
 
   const handler = e => {
     const b = e.target.closest('button[data-clan]');
     if (!b) return;
     filterClan(b.dataset.clan);
-    if (clanDialog.open) clanDialog.close();
+    if (clanDialog && clanDialog.open) clanDialog.close();
   };
-  nav.onclick = handler;
-  clanList.onclick = handler;
-  document.getElementById('clanToggle').onclick = () => {
-    zoomMenu.open = false;
-    clanDialog.showModal();
-  };
+  if (nav) nav.onclick = handler;
+  if (clanList) clanList.onclick = handler;
+  const clanToggle = document.getElementById('clanToggle');
+  if (clanToggle && clanDialog) {
+    clanToggle.onclick = () => {
+      if (zoomMenu) zoomMenu.open = false;
+      clanDialog.showModal();
+    };
+  }
 }
 
 /* --- поиск персон --- */
 function initSearch() {
   const q = document.getElementById('q'), res = document.getElementById('results');
-  let selIdx = -1;
+  if (!q || !res) return;
   const doSearch = () => {
     const val = norm(q.value.trim());
     if (!val || val.length < 2) { res.style.display = 'none'; return; }
@@ -1177,7 +1368,6 @@ function initSearch() {
       return `<button type="button" data-p="${id}"><b>${esc(p.name)}</b><small>${esc(dates)}</small></button>`;
     }).join('');
     res.style.display = 'block';
-    selIdx = -1;
   };
   q.addEventListener('input', doSearch);
   q.addEventListener('focus', () => { if (q.value.trim().length >= 2) doSearch(); });
@@ -1211,11 +1401,11 @@ function clearSel() {
 
 function setReading(enable, scroll = false) {
   panel.classList.toggle('reading', enable);
-  document.querySelector('main').classList.toggle('reading', enable);
+  document.querySelector('main')?.classList.toggle('reading', enable);
 }
 
 /* ==========================================================================
-   ОБНОВЛЁННАЯ ФУНКЦИЯ renderPanel — боковая шторка персоны (aside)
+   renderPanel — боковая шторка персоны (aside)
    ========================================================================== */
 function renderPanel(id) {
   const p = D.people[id];
@@ -1355,7 +1545,6 @@ function renderPanel(id) {
   panel.classList.add('open');
   panel.classList.remove('min');
 
-  // Обработчики внутри шторки
   panel.querySelector('.x').onclick = () => clearSel();
   panel.querySelector('.tg').onclick = () => panel.classList.toggle('min');
   panel.querySelector('.reading-enter').onclick = () => setReading(true, true);
@@ -1368,13 +1557,18 @@ function renderPanel(id) {
 
 /* --- полноэкранный лайтбокс --- */
 const lb = document.getElementById('lb');
-document.getElementById('help').onclick = () => {
-  const t = document.getElementById('helpT');
-  lb.className = 'open';
-  lb.querySelector('.box').innerHTML = t.innerHTML;
-  lb.querySelector('.close').onclick = () => lb.classList.remove('open');
-};
-lb.onclick = e => { if (e.target === lb || e.target.classList.contains('close')) lb.classList.remove('open', 'img'); };
+const helpBtn = document.getElementById('help');
+if (helpBtn && lb) {
+  helpBtn.onclick = () => {
+    const t = document.getElementById('helpT');
+    lb.className = 'open';
+    lb.querySelector('.box').innerHTML = t.innerHTML;
+    lb.querySelector('.close').onclick = () => lb.classList.remove('open');
+  };
+  lb.onclick = e => { 
+    if (e.target === lb || e.target.classList.contains('close')) lb.classList.remove('open', 'img'); 
+  };
+}
 
 /* --- инициализация данных --- */
 D = initialData;
@@ -1390,7 +1584,8 @@ svg.setAttribute('width', 1);
 svg.setAttribute('height', 1);
 stageEl.prepend(svg);
 
-fullL = document.createElementNS(SVGNS, 'g'); fullL.id = 'fullL';
+fullL = document.createElementNS(SVGNS, 'g'); 
+fullL.id = 'fullL';
 svg.appendChild(fullL);
 
 initFocus();
@@ -1399,7 +1594,7 @@ initSearch();
 
 // Первоначальный рендер
 renderView(0, 0);
-stageActions.hidden = false;
+if (stageActions) stageActions.hidden = false;
 
 // Подгон масштаба по центру
 setTimeout(() => {
@@ -1407,4 +1602,3 @@ setTimeout(() => {
 }, 60);
 
 })();
-
